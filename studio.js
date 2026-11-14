@@ -154,7 +154,7 @@ function editor() {
 }
 function designPrice(){return money(unit(design)*design.quantity)+' · '+money(unit(design))+' each';}
 
-function subtotal(){return state.cart.reduce((sum,line)=>sum+unit(line.design)*line.design.quantity,sum,0);}
+function subtotal(){return state.cart.reduce((sum,line)=>sum+unit(line.design)*line.design.quantity,0);}
 function totals(quoted=false){
   const base=subtotal(), discount=state.promo?Math.round(base*.1):0;
   const fee=protection?399:0;
