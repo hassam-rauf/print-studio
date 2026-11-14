@@ -503,7 +503,7 @@ function checkout(){
 }
 function orderView(){
   const order=state.orders.at(-1);
-  return '<section class="hero"><h1>Test order placed</h1><p>Order '+safe(order.id.slice(0,8).toUpperCase())+' · '+money(order.total)+'</p>'+button('Continue shopping','home','','class="primary"')+'</section><div class="grid">'+order.items.map(line=>'<article class="tile">'+mockup(line.design)+'<h2>'+products[line.design.key].name+'</h2><p>Quantity '+line.design.quantity+'</p>'+line.design.surfaces.map((_,index)=>button('Export '+sideName(index,line.design).toLowerCase(),'export',line.id+':'+index)).join('')+'</article>').join('')+'</div>';
+  return '<section class="hero"><h1>Test order placed</h1><p>Order '+safe(order.id.slice(0,8).toUpperCase())+' · '+money(order.total)+'</p>'+button('Continue shopping','home','','class="primary"')+'</section><div class="grid">'+order.items.map(line=>'<article class="tile">'+mockup(line.design)+'<div class="tile-info"><h2>'+products[line.design.key].name+'</h2><p>Quantity '+line.design.quantity+'</p><div class="row">'+button('View order proof','order-preview',line.id)+line.design.surfaces.map((_,index)=>button('Export '+sideName(index,line.design).toLowerCase(),'export',line.id+':'+index)).join('')+'</div></div></article>').join('')+'</div>';
 }
 function updateCount(){byId('count').textContent=state.cart.reduce((sum,line)=>sum+line.design.quantity,0);}
 function render(){
@@ -637,6 +637,10 @@ const actions={
     if(!address||!state.cart.length)return;
     const order={id:id(),items:clone(state.cart),total:totals(true).total,delivery,giftMessage,created:new Date().toISOString()};
     if(persist({...state,orders:[...state.orders,order],cart:[],promo:false})){address=null;protection=false;giftMessage='';go('order');}
+  },
+  'order-preview'(key){
+    const line=state.orders.at(-1)?.items.find(item=>item.id===key);
+    if(line)showProof(line.design);
   },
   export(value){
     const [key,index]=value.split(':');
