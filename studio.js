@@ -195,8 +195,10 @@ let svgSerial=0;
 function art(doc,index=0,edit=false) {
   const [w,h]=dimensions(doc);
   const scope='art'+(++svgSerial);
+  const [inchWidth,inchHeight]=inchesFor(doc);
+  const outputWidth=edit?w:inchWidth+'in',outputHeight=edit?h:inchHeight+'in';
   const guides=edit&&showGuides?'<rect class="guide" x="1" y="1" width="'+(w-2)+'" height="'+(h-2)+'" fill="none" stroke="#f59e8b"/><rect class="guide" x="8" y="8" width="'+(w-16)+'" height="'+(h-16)+'" fill="none" stroke="#4575db"/><rect class="guide" x="22" y="22" width="'+(w-44)+'" height="'+(h-44)+'" fill="none" stroke="#239d70" stroke-dasharray="6 4"/>':'';
-  return '<svg class="art" role="img" aria-label="'+(edit?'Editable design canvas':'Product artwork')+'" width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg">'+composition(doc,index,scope,edit)+guides+'</svg>';
+  return '<svg class="art" role="img" aria-label="'+(edit?'Editable design canvas':'Product artwork')+'" width="'+outputWidth+'" height="'+outputHeight+'" viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg">'+composition(doc,index,scope,edit)+guides+'</svg>';
 }
 function planar(doc,view){
   const type=productFor(doc).type, index=view==='Back'?1:0;
@@ -236,6 +238,26 @@ const mockPhotos={
   bag:{Front:[3,111,274,134,298],Back:[18,93,288,138,303]},
   keychain:{Front:[4,108,278,143,312],Back:[4,108,278,143,312]}
 };
+
+function variantTint(doc,view,cell){
+  const type=doc.key, color=colorways[doc.options.Color];
+  const shapeMasks={
+    shirt:{2:'M32 89 L97 47 L149 27 Q190 45 234 24 L286 47 L349 91 L311 145 L285 130 L295 316 L86 316 L93 131 L68 145 Z',11:'M33 86 L99 42 L151 17 Q192 36 233 17 L288 42 L350 86 L313 140 L287 127 L295 316 L85 316 L94 127 L69 139 Z'},
+    bag:{3:'M100 124 H284 V311 H100 Z',18:'M82 124 H303 V322 H82 Z'},
+    tumbler:{1:'M127 74 H257 L240 283 Q193 304 142 283 Z',12:'M110 82 H267 L251 303 Q192 330 130 303 Z',13:'M114 82 H273 L251 303 Q195 330 137 303 Z',14:'M114 69 H271 L252 305 Q190 329 130 305 Z',15:'M94 150 Q181 196 283 141 L252 298 Q190 337 130 291 Z',19:'M118 65 H270 L257 305 Q193 330 130 300 Z'}
+  };
+  const mask=shapeMasks[type]?.[cell];
+  const tinted=mask&&color&&!['White','Natural'].includes(doc.options.Color)?
+    '<path d="'+mask+'" fill="'+color+'" opacity=".88" style="mix-blend-mode:multiply"/>':'';
+  if(type!=='mug')return tinted;
+  if(doc.options.Style==='Classic'||doc.options.Color==='Black'||doc.options.Color==='Cobalt'){
+    const rim={0:[185,89,80,14],5:[211,54,83,12],6:[210,67,84,21],7:[167,61,83,19],8:[186,61,85,16],9:[193,59,86,16],10:[224,89,71,11]}[cell];
+    const handles={0:'M267 111 C337 110 350 237 267 243',5:'M123 84 C49 80 34 211 123 231',6:'M126 83 C58 82 34 211 126 228',7:'M253 86 C342 74 360 232 253 236',8:'M272 95 C342 88 336 233 272 242',9:'M192 99 V254',10:'M294 110 C363 104 367 211 294 223'};
+    const tintColor=doc.options.Style==='Classic'?'#e1dfd8':color;
+    return '<ellipse cx="'+rim[0]+'" cy="'+rim[1]+'" rx="'+rim[2]+'" ry="'+rim[3]+'" fill="'+tintColor+'" opacity=".83"/><path d="'+handles[cell]+'" stroke="'+tintColor+'" opacity=".83" stroke-width="'+(view==='Handle'?32:13)+'" fill="none" stroke-linecap="round"/>';
+  }
+  return '';
+}
 function photoProduct(doc,view,mini){
   const type=doc.key, photos=mockPhotos[type];
   const keychainShape={Square:[16,106,282,148,302],Rectangle:[17,143,354,133,217]};
@@ -264,7 +286,7 @@ function photoProduct(doc,view,mini){
   }
   const occlusion=type==='mug'&&view==='Handle'?'<mask id="'+scope+'Handle"><rect width="384" height="341" fill="white"/><rect x="172" y="92" width="44" height="179" rx="21" fill="black"/></mask>':'';
   const detail=view==='Print Detail'?' detail':'';
-  return '<div class="photo-proof'+detail+'" role="img" aria-label="'+safe(productFor(doc).name+' '+view)+'"><div class="photo-composite photo-cell-'+cell+'"><svg viewBox="0 0 384 341" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs><g id="'+scope+'Artwork">'+composition(doc,viewIndex,scope,false)+'</g>'+occlusion+'</defs><g'+(occlusion?' mask="url(#'+scope+'Handle)"':'')+'>'+artwork+'</g></svg></div></div>';
+  return '<div class="photo-proof'+detail+'" role="img" aria-label="'+safe(productFor(doc).name+' '+view)+'"><div class="photo-composite photo-cell-'+cell+'"><svg viewBox="0 0 384 341" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs><g id="'+scope+'Artwork">'+composition(doc,viewIndex,scope,false)+'</g>'+occlusion+'</defs>'+variantTint(doc,view,cell)+'<g'+(occlusion?' mask="url(#'+scope+'Handle)"':'')+'>'+artwork+'</g></svg></div></div>';
 }
 function productImage(doc,view=defaultView(doc),mini=false){
   if(mockPhotos[doc.key])return photoProduct(doc,view,mini);
@@ -626,6 +648,14 @@ const actions={
     setTimeout(()=>URL.revokeObjectURL(blob),1000);
   }
 };
+document.addEventListener('paste',event=>{
+  if(page!=='editor'||step!=='Design'||byId('proof').open)return;
+  const image=Array.from(event.clipboardData?.files||[]).find(file=>file.type.startsWith('image/'));
+  if(!image)return;
+  event.preventDefault();
+  activeTool='Uploads';
+  uploadImage(image,'add');
+});
 document.addEventListener('click',event=>{
   const control=event.target.closest('button[data-action]');
   if(control)actions[control.dataset.action]?.(control.dataset.value);
