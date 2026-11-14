@@ -164,3 +164,5 @@ dialog form{display:flex;justify-content:flex-end;margin-bottom:8px}
 .editor-layout .canvas-scroll{min-height:320px}
 .editor-layout .editor-preview .photo-proof{aspect-ratio:384/341}
 .thumbs button[data-value="With Donut"]{grid-column:1/-1;grid-template-columns:1fr;}.thumbs button[data-value="With Donut"] .photo-proof{height:80px;max-width:150px}
+
+.stage .photo-proof svg,.live-product .photo-proof svg{mix-blend-mode:normal}.photo-composite svg>g{mix-blend-mode:multiply}
