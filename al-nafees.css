@@ -187,13 +187,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* Keep the product mockup and editable print area together on phones. */
 .workspace-surfaces { display: contents; }
-.photo-composite { position: relative; }
-.photo-composite svg.variant-tint {
-  position: absolute;
-  inset: 0;
-  mix-blend-mode: normal;
-}
-.photo-composite > svg:not(.variant-tint) { position: relative; }
 
 @media (max-width: 780px) {
   .mobile-design-actions button[data-value="Product"] { margin-right: auto; }
