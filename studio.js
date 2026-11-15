@@ -300,43 +300,140 @@ function wrapProjection(w,h,scope,cell,angle,mini){
   }).join('');
 }
 
-function variantTint(doc,view,cell){
-  const type=doc.key, color=colorways[doc.options.Color];
-  const shapeMasks={
-    shirt:{2:'M32 89 L97 47 L149 27 Q190 45 234 24 L286 47 L349 91 L311 145 L285 130 L295 316 L86 316 L93 131 L68 145 Z',11:'M33 86 L99 42 L151 17 Q192 36 233 17 L288 42 L350 86 L313 140 L287 127 L295 316 L85 316 L94 127 L69 139 Z'},
-    bag:{3:'M100 124 H284 V311 H100 Z',18:'M82 124 H303 V322 H82 Z'},
-    tumbler:{1:'M127 74 H257 L240 283 Q193 304 142 283 Z',12:'M110 82 H267 L251 303 Q192 330 130 303 Z',13:'M114 82 H273 L251 303 Q195 330 137 303 Z',14:'M114 69 H271 L252 305 Q190 329 130 305 Z',15:'M94 150 Q181 196 283 141 L252 298 Q190 337 130 291 Z',19:'M118 65 H270 L257 305 Q193 330 130 300 Z'}
-  };
-  const mask=shapeMasks[type]?.[cell];
-  if(type==='keychain'){
-    const faces={
-      4:'<ellipse cx="193" cy="227" rx="85" ry="84" />',
-      16:'<rect x="106" y="148" width="176" height="154" rx="22" />',
-      17:'<rect x="143" y="133" width="211" height="84" rx="18" />'
-    };
-    const rings={4:[193,72,53,53],16:[193,72,53,51],17:[66,174,48,46]};
-    const face=doc.options.Color==='White'?'<g fill="#fff" opacity=".56">'+faces[cell]+'</g>':'';
-    if(doc.options.Hardware!=='Gold')return face;
-    const [cx,cy,rx,ry]=rings[cell];
-    return face+'<ellipse cx="'+cx+'" cy="'+cy+'" rx="'+rx+'" ry="'+ry+'" fill="none" stroke="#bb8f38" stroke-width="4" opacity=".75"/>';
-  }
-  const tintWhite=type==='bag'&&doc.options.Color==='White';
-  const tinted=mask&&color&&(tintWhite||!['White','Natural'].includes(doc.options.Color))?
-    '<path d="'+mask+'" fill="'+(tintWhite?'#fff':color)+'" opacity="'+(tintWhite?.5:.74)+'"/>':'';
-  if(type!=='mug')return tinted;
-  const [top,bottom]=wrapBands[cell];
-  const body=doc.options.Finish==='Warm ivory'
-    ?'<path d="M'+top[0]+' '+top[2]+' Q'+((top[0]+top[1])/2)+' '+((top[2]+top[3])/2+top[4]*2)+' '+top[1]+' '+top[3]+
-      ' L'+bottom[1]+' '+bottom[3]+' Q'+((bottom[0]+bottom[1])/2)+' '+((bottom[2]+bottom[3])/2+bottom[4]*2)+' '+bottom[0]+' '+bottom[2]+
-      ' Z" fill="#efcf8c" opacity=".29"/>':'';
+// Material outlines in the 384 × 341 photo cells. Their masks are refined
+// against the blue backdrop so the color ends at the photographed edge.
+const materialOutlines={
+  1:'M124 68 Q190 81 259 68 C257 150 246 258 242 297 Q240 314 192 314 Q143 314 139 298 C132 252 126 151 124 68 Z',
+  2:'M31 87 Q77 50 124 32 L154 19 Q186 34 238 20 L291 43 L352 88 L313 149 L285 137 L296 318 L85 318 L91 136 L67 150 Z',
+  3:'M99 124 H285 V314 H98 Z M138 127 C141 78 154 14 185 13 C216 12 232 73 247 127 H228 C224 85 213 19 186 19 C160 20 156 83 156 127 Z',
+  4:'M193 137 C243 137 283 176 283 232 C283 282 246 321 193 323 C141 323 101 283 101 233 C101 179 141 137 193 137 Z',
+  11:'M31 84 L91 37 L147 13 Q189 25 226 10 L288 36 L355 86 L315 143 L286 130 L296 318 L85 318 L89 131 L66 144 Z',
+  12:'M108 66 Q176 91 273 62 C272 145 262 248 251 298 Q248 321 192 322 Q132 322 129 299 C120 248 111 146 108 66 Z',
+  13:'M113 62 Q201 89 274 66 C273 147 262 248 253 299 Q250 322 193 322 Q135 322 133 299 C123 241 116 148 113 62 Z',
+  14:'M111 63 Q188 73 274 63 C273 146 263 253 253 301 Q250 322 190 323 Q133 323 130 299 C122 240 114 146 111 63 Z',
+  15:'M92 113 C110 157 208 205 287 122 C276 203 254 282 243 304 Q229 329 189 329 Q145 326 134 300 C116 248 100 174 92 113 Z',
+  16:'M104 139 H260 Q289 139 289 168 V285 Q289 312 262 312 H126 Q97 312 97 288 V166 Q97 139 104 139 Z',
+  17:'M155 122 H334 Q365 122 365 146 V204 Q365 230 337 230 H153 Q130 230 130 203 V148 Q130 122 155 122 Z',
+  18:'M80 124 H305 L299 313 Q298 328 283 328 H108 Q86 329 84 308 Z M123 126 C130 74 143 5 194 5 C227 5 243 59 257 126 H240 C232 86 224 13 194 13 C159 13 151 77 147 126 Z',
+  19:'M114 62 Q185 68 271 62 C268 142 262 252 256 297 Q251 324 192 324 Q132 323 129 299 C121 241 117 138 114 62 Z'
+};
+const mugBodies={
+  0:'M101 90 Q187 112 266 90 L265 264 Q263 289 183 292 Q111 290 102 268 Z',
+  5:'M126 61 Q212 78 301 60 L299 267 Q295 290 212 288 Q128 285 126 264 Z',
+  6:'M124 62 Q209 89 301 59 L300 254 Q300 289 213 289 Q127 287 124 257 Z',
+  7:'M79 64 Q165 90 258 61 L260 262 Q255 290 172 290 Q89 288 83 268 Z',
+  8:'M97 60 Q187 92 275 58 L276 265 Q271 291 190 291 Q100 293 98 268 Z',
+  9:'M103 64 Q189 88 284 61 L284 267 Q280 289 196 289 Q113 289 107 268 Z',
+  10:'M149 91 Q224 111 299 89 L299 243 Q295 267 225 267 Q152 266 151 246 Z'
+};
+const keychainRings={4:[192,74,53,53],16:[193,74,55,50],17:[69,174,48,42]};
+const variantPhotos=new Map();
+const photoSheets=new Map();
 
-  if(doc.options.Style==='Classic'||doc.options.Color==='Black'||doc.options.Color==='Cobalt'){
-    const rim={0:[185,89,80,14],5:[211,54,83,12],6:[210,67,84,21],7:[167,61,83,19],8:[186,61,85,16],9:[193,59,86,16],10:[224,89,71,11]}[cell];
-    const handles={0:'M267 111 C337 110 350 237 267 243',5:'M123 84 C49 80 34 211 123 231',6:'M126 83 C58 82 34 211 126 228',7:'M253 86 C342 74 360 232 253 236',8:'M272 95 C342 88 336 233 272 242',9:'M192 99 V254',10:'M294 110 C363 104 367 211 294 223'};
-    const tintColor=doc.options.Style==='Classic'?'#e1dfd8':color;
-    return body+'<ellipse cx="'+rim[0]+'" cy="'+rim[1]+'" rx="'+rim[2]+'" ry="'+rim[3]+'" fill="'+tintColor+'" opacity=".83"/><path d="'+handles[cell]+'" stroke="'+tintColor+'" opacity=".83" stroke-width="'+(view==='Handle'?32:13)+'" fill="none" stroke-linecap="round"/>';
+function variantColors(doc){
+  const {Color:color,Style:style,Finish:finish,Hardware:hardware}=doc.options;
+  const colorHex=colorways[color];
+  if(doc.key==='mug')return [
+    finish==='Warm ivory'?'#ead9b4':'',
+    style==='Classic'?'#d9d8d4':color==='Forest'?'':colorHex
+  ];
+  if(doc.key==='keychain')return [color==='White'?'#fafafa':'',hardware==='Gold'?'#b59550':''];
+  return [color===(doc.key==='bag'?'Natural':'White')?'':colorHex,''];
+}
+function photoMaterialMask(context,path,edge=0){
+  context.clearRect(0,0,384,341);
+  context.fillStyle='#fff';
+  context.fill(path,'evenodd');
+  if(edge){
+    context.strokeStyle='#fff';context.lineWidth=edge;context.lineJoin='round';context.stroke(path);
   }
-  return body;
+  return context.getImageData(0,0,384,341).data;
+}
+function hardwareMask(context,cell){
+  const [x,y,rx,ry]=keychainRings[cell];
+  const outlines=new Path2D();
+  outlines.ellipse(x,y,rx+4,ry+5,0,0,Math.PI*2);
+  outlines.ellipse(x,y,rx-4,ry-5,0,0,Math.PI*2);
+  if(cell===17)outlines.rect(103,168,45,16);
+  else outlines.rect(x-8,y+ry,18,32);
+  return photoMaterialMask(context,outlines);
+}
+const fraction=value=>Math.max(0,Math.min(1,value));
+function materialChannel(color,light,middle,gloss){
+  if(light<middle)return color*(.32+.68*light/middle);
+  return color+(255-color)*fraction((light-middle)/(255-middle))*gloss;
+}
+function materialRGB(hex){
+  return hex.slice(1).match(/../g).map(channel=>parseInt(channel,16));
+}
+async function paintVariantPhoto(source,cell,kind,body,trim){
+  const sheetIndex=cell<12?0:1;
+  if(!photoSheets.has(sheetIndex)){
+    const img=new Image();
+    img.src=source;
+    photoSheets.set(sheetIndex,img.decode().then(()=>img));
+  }
+  const photo=await photoSheets.get(sheetIndex);
+  const offset=sheetIndex===0?cell:cell-12;
+  const width=photo.naturalWidth/4, height=photo.naturalHeight/(sheetIndex===0?3:2);
+  const canvas=document.createElement('canvas');
+  canvas.width=384;canvas.height=341;
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(photo,offset%4*width,Math.floor(offset/4)*height,width,height,0,0,384,341);
+  const frame=ctx.getImageData(0,0,384,341);
+  const bodyPath=mugBodies[cell]||materialOutlines[cell];
+  const bodyMask=body&&bodyPath?photoMaterialMask(ctx,new Path2D(bodyPath),5):null;
+  const ring=trim&&kind==='keychain'?hardwareMask(ctx,cell):null;
+  const bodyRGB=body?materialRGB(body):null;
+  const trimRGB=trim?materialRGB(trim):null;
+  const pixels=frame.data;
+  for(let i=0;i<pixels.length;i+=4){
+    const r=pixels[i],g=pixels[i+1],b=pixels[i+2];
+    const green=fraction((g-r-2)/6)*fraction((g-b+2)/8);
+    const neutral=fraction((34-(b-r))/13)*fraction((r-g+11)/5);
+    let shade=bodyRGB, amount=bodyMask?bodyMask[i+3]/255*neutral:0, middle=212, gloss=.27;
+    if(kind==='mug'){
+      amount*=1-green;
+      if(trimRGB&&green>0){shade=trimRGB;amount=green;middle=49;gloss=.72;}
+    }else if(ring&&ring[i+3]){
+      shade=trimRGB;amount=ring[i+3]/255*neutral;middle=152;gloss=.8;
+    }
+    if(amount===0)continue;
+    const light=.2126*r+.7152*g+.0722*b;
+    for(let channel=0;channel<3;channel++){
+      const replacement=materialChannel(shade[channel],light,middle,gloss);
+      pixels[i+channel]=pixels[i+channel]*(1-amount)+replacement*amount;
+    }
+  }
+  ctx.putImageData(frame,0,0);
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.94));
+  if(!blob)throw Error('Could not render product photo');
+  return URL.createObjectURL(blob);
+}
+function syncProductColors(root){
+  for(const part of root.querySelectorAll('.photo-composite[data-variant-cell]:not([data-variant-state])')){
+    const {variantCell,variantKind,variantBody,variantTrim}=part.dataset;
+    const cacheKey=[variantCell,variantBody,variantTrim].join(':');
+    if(!variantPhotos.has(cacheKey)){
+      const sprite=getComputedStyle(part).backgroundImage.match(/^url\("(data:image\/[^"]+)"\)$/)?.[1];
+      if(!sprite)continue;
+      variantPhotos.set(cacheKey,paintVariantPhoto(sprite,Number(variantCell),variantKind,variantBody,variantTrim));
+    }
+    part.dataset.variantState='loading';
+    part.style.visibility='hidden';
+    variantPhotos.get(cacheKey).then(url=>{
+      if(!part.isConnected)return;
+      part.style.backgroundImage='url("'+url+'")';
+      part.style.backgroundSize='100% 100%';
+      part.style.backgroundPosition='center';
+      part.dataset.variantState='ready';
+      part.style.removeProperty('visibility');
+    }).catch(()=>{
+      variantPhotos.delete(cacheKey);
+      part.dataset.variantState='error';
+      part.style.removeProperty('visibility');
+    });
+  }
 }
 function previewSurface(doc,view,detailSide=0){
   if(isWrap(doc))return 0;
@@ -366,9 +463,10 @@ function photoProduct(doc,view,mini,detailSide){
   const detail=view==='Print Detail'?' detail':'';
   const label=productFor(doc).name+' '+(detail?surfaceView+' ': '')+view;
   const sheet='<clipPath id="'+scope+'Sheet"><rect width="'+w+'" height="'+h+'"/></clipPath>';
-  const tint=variantTint(doc,surfaceView,cell);
-  const tintLayer=tint?'<svg class="variant-tint" viewBox="0 0 384 341" aria-hidden="true">'+tint+'</svg>':'';
-  return '<div class="photo-proof'+detail+'" role="img" aria-label="'+safe(label)+'"><div class="photo-composite photo-cell-'+cell+'">'+tintLayer+'<svg viewBox="0 0 384 341" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>'+sheet+'<g id="'+scope+'Artwork" clip-path="url(#'+scope+'Sheet)">'+composition(doc,viewIndex,scope,false)+'</g>'+occlusion+'</defs><g'+(occlusion?' mask="url(#'+scope+'Handle)"':'')+'>'+artwork+'</g></svg></div></div>';
+  const [body,trim]=variantColors(doc);
+  const colorData=body||trim?' data-variant-cell="'+cell+'" data-variant-kind="'+type+
+    '" data-variant-body="'+safe(body)+'" data-variant-trim="'+safe(trim)+'"':'';
+  return '<div class="photo-proof'+detail+'" role="img" aria-label="'+safe(label)+'"><div class="photo-composite photo-cell-'+cell+'"'+colorData+'><svg viewBox="0 0 384 341" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>'+sheet+'<g id="'+scope+'Artwork" clip-path="url(#'+scope+'Sheet)">'+composition(doc,viewIndex,scope,false)+'</g>'+occlusion+'</defs><g'+(occlusion?' mask="url(#'+scope+'Handle)"':'')+'>'+artwork+'</g></svg></div></div>';
 }
 function productImage(doc,view=defaultView(doc),mini=false,detailSide=0){
   if(mockPhotos[doc.key])return photoProduct(doc,view,mini,detailSide);
@@ -618,6 +716,7 @@ function showProof(doc,view=defaultView(doc),detailSide=0){
   byId('proof-content').innerHTML='<div class="section-head"><h2>Product preview</h2><label>Zoom<select id="proof-zoom"><option value="1">100%</option><option value="1.5">150%</option><option value="2">200%</option></select></label></div><div class="proof-viewport">'+productImage(doc,view,false,index)+'</div>'+previewButtons(doc,view,'proof-view',false)+
     '<p class="muted">'+Object.values(doc.options).map(safe).join(' · ')+'</p>';
   if(!byId('proof').open)byId('proof').showModal();
+  syncProductColors(byId('proof-content'));
 }
 function subtotal(){return state.cart.reduce((sum,line)=>sum+unit(line.design)*line.design.quantity,0);}
 function deliverySelector(inForm=false){
@@ -696,6 +795,7 @@ function render(){
   const panelScroll=previousInspector?.dataset.tool===activeTool
     ?previousInspector.querySelector('.inspector-body').scrollTop:0;
   app.innerHTML=views[page]();
+  syncProductColors(app);
   const rail=app.querySelector('.tool-rail');
   if(rail)rail.scrollLeft=railScroll;
   const inspectorBody=app.querySelector('.inspector-body');
@@ -964,6 +1064,7 @@ document.addEventListener('change',async event=>{
     app.querySelector('.canvas-card .art').outerHTML=art(design,side,true);
     byId('live-product').innerHTML=productImage(design,activeView,false,side);
     app.querySelector('.editor-preview .thumbs').outerHTML=previewButtons(design,activeView,'view',true,side);
+    syncProductColors(app);
     const label=app.querySelector('.layer-list button[data-value="'+selected+'"]');
     if(property==='text'&&label)label.textContent=value||'Text';
     refreshHistoryButtons();
@@ -989,6 +1090,7 @@ function queueTextPreview(){
     app.querySelector('.canvas-card .art').outerHTML=art(design,side,true);
     byId('live-product').innerHTML=productImage(design,activeView,false,side);
     app.querySelector('.editor-preview .thumbs').outerHTML=previewButtons(design,activeView,'view',true,side);
+    syncProductColors(app);
     const label=app.querySelector('.layer-list button[data-value="'+selected+'"]');
     if(label)label.textContent=currentLayer()?.text||'Text';
     refreshHistoryButtons();
