@@ -250,3 +250,32 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
     max-height: min(175px,30dvh,var(--editor-viewport,100dvh) * .38);
   }
 }
+
+.review-overview,.review-purchase { display: grid; gap: 8px; min-width: 0; }
+.review-total { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 3px 8px; }
+.review-total span { font-size: 13px; color: var(--muted); }
+.review-total strong { font-size: 18px; }
+.review-mockup { display: block; padding: 0; overflow: hidden; width: 100%; align-self: center; }
+.review-warnings { display: grid; gap: 6px; padding: 8px; }
+.review-warnings h3 { margin: 0; font-size: 13px; }
+.review-issue summary,.review-specs summary { cursor: pointer; padding: 8px 0; }
+.review-issue summary,.issue-count { font-size: 13px; }
+.issue-count { color: var(--muted); white-space: nowrap; }
+.review-issue-actions { display: grid; gap: 4px; padding: 3px 0; }
+.review-issue-actions button { text-align: left; font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+.review-status { font-size: 13px; }
+.review-specs { border-top: 1px solid var(--line); }
+.review-specs summary { font-size: 14px; font-weight: 650; }
+.review-specs .review-options { margin: 4px 0 0; font-size: 14px; }
+.review-specs dd { text-align: right; }
+@media (max-width: 780px) {
+  .review-screen.editor-other { margin: 0; align-content: start; padding: 10px; }
+  .review-panel { padding: 12px; gap: 9px; }
+  .review-panel h2 { font-size: 19px; }
+  .review-overview { grid-template-columns: minmax(0,1fr) minmax(0,1.15fr); align-items: center; }
+  .review-mockup { max-width: 170px; }
+  .review-product-name { font-size: 14px; }
+  .review-purchase { gap: 5px; }
+  .review-purchase input { max-width: 100px; padding: 6px 8px; }
+  .review-issue summary,.review-specs summary { padding-block: 10px; }
+}
