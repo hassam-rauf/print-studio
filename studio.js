@@ -108,7 +108,7 @@ function applyTemplate(doc,name){
   const [w,h]=dimensions(doc);
   const themes={morning:['The Morning Club','#184a36','✦'],coast:['COASTAL CLUB','#244bc7','☀'],made:['Made for you','#9c3654','♥']};
   const [copy,color,symbol]=themes[name];
-  const centers=isWrap(doc)?[104,296]:[w/2];
+  const centers=isWrap(doc)?[w*.13,w/2,w*.87]:[w/2];
   doc.backgrounds=doc.surfaces.map(()=> 'transparent');
   delete doc.backgroundImages;
   doc.surfaces=doc.surfaces.map((_,index)=>centers.flatMap(x=>[
@@ -223,21 +223,67 @@ function planar(doc,view){
 
 const mockPhotos={
   mug:{
-    Center:[0,104,265,103,277,0], Left:[5,126,299,73,276,-95],
-    'Front Left':[6,124,298,82,276,-48], 'Front Right':[7,82,260,80,276,42],
-    Right:[8,100,274,79,273,90], Handle:[9,106,282,76,272,180],
-    'With Donut':[10,153,299,99,253,24]
+    Center:[0,0], Left:[5,-95], 'Front Left':[6,-48], 'Front Right':[7,45],
+    Right:[8,95], Handle:[9,180], 'With Donut':[10,0]
   },
   tumbler:{
-    Center:[1,130,255,75,291,0], Left:[12,113,263,83,298,-95],
-    'Front Left':[12,113,263,83,298,-48],'Front Right':[13,117,270,82,298,48],
-    Right:[19,122,266,68,306,95], Back:[14,114,266,70,300,180],
-    'With Lid':[15,108,276,160,301,24]
+    Center:[1,0], Left:[12,-95], 'Front Left':[12,-48], 'Front Right':[13,48],
+    Right:[19,95], Back:[14,180], 'With Lid':[15,0]
   },
   shirt:{Front:[2,102,280,86,293],Back:[11,101,284,83,290]},
   bag:{Front:[3,111,274,134,298],Back:[18,93,288,138,303]},
   keychain:{Front:[4,108,278,143,312],Back:[4,108,278,143,312]}
 };
+
+// Left/right limits of the printable band, in photo pixels. Each row contains
+// the top edge and the bottom edge as [left x, right x, left y, right y, bow].
+const wrapBands={
+  0:[[107,261,96,97,8],[108,259,263,263,17]],
+  1:[[128,256,69,69,7],[142,240,277,277,12]],
+  5:[[130,297,66,62,8],[131,296,258,258,19]],
+  6:[[129,297,75,69,12],[129,296,257,257,20]],
+  7:[[86,256,66,65,13],[89,255,258,258,19]],
+  8:[[102,272,65,65,11],[104,272,270,270,17]],
+  9:[[110,278,65,63,10],[111,277,267,267,19]],
+  10:[[154,295,99,98,9],[155,294,246,246,15]],
+  12:[[113,269,73,58,12],[134,247,287,287,14]],
+  13:[[117,269,55,69,13],[137,250,287,287,14]],
+  14:[[116,269,66,66,5],[135,250,287,287,14]],
+  15:[[100,281,117,114,51],[137,247,290,285,20]],
+  19:[[119,269,66,66,5],[134,255,286,286,13]]
+};
+function bandPoint([left,right,yLeft,yRight,bow],pos){
+  return [left+(right-left)*pos,yLeft+(yRight-yLeft)*pos+4*bow*pos*(1-pos)];
+}
+const svgNum=value=>Number(value.toFixed(4));
+function wrapProjection(w,h,scope,cell,angle,mini){
+  const [top,bottom]=wrapBands[cell];
+  const circumference=w, phase=.5+angle/360;
+  const stripCount=mini?12:44;
+  return Array.from({length:stripCount},(_,i)=>{
+    const from=i/stripCount,to=(i+1)/stripCount,mid=(from+to)/2;
+    const source=u=>circumference*(phase+Math.asin(2*u-1)/(2*Math.PI));
+    const start=source(from),end=source(to),center=(start+end)/2;
+    const [tx,ty]=bandPoint(top,mid), [bx,by]=bandPoint(bottom,mid);
+    const lo=Math.max(0,from-.22/(top[1]-top[0]));
+    const hi=Math.min(1,to+.22/(top[1]-top[0]));
+    const quad=[bandPoint(top,lo),bandPoint(top,hi),bandPoint(bottom,hi),bandPoint(bottom,lo)];
+    const sx=Math.max(top[1]-top[0],bottom[1]-bottom[0])*(to-from)/(end-start);
+    const sy=(by-ty)/h, shear=(bx-tx)/h;
+    const rise=(bandPoint(top,to)[1]-bandPoint(top,from)[1]+bandPoint(bottom,to)[1]-bandPoint(bottom,from)[1])/2;
+    const slope=rise/(end-start);
+    const clip=scope+'Strip'+i;
+    let copies='';
+    // Only reference artwork periods that contribute to this strip. At the
+    // seam both are cropped to the printable sheet before they meet.
+    for(let turn=Math.floor((start-.5)/w);turn<=Math.floor((end+.5)/w);turn++){
+      const offset=turn*w-center;
+      const matrix=[sx,slope,shear,sy,tx+sx*offset,ty+slope*offset].map(svgNum).join(' ');
+      copies+='<use href="#'+scope+'Artwork" transform="matrix('+matrix+')"/>';
+    }
+    return '<clipPath id="'+clip+'"><polygon points="'+quad.map(point=>point.map(svgNum).join(',')).join(' ')+'"/></clipPath><g clip-path="url(#'+clip+')">'+copies+'</g>';
+  }).join('');
+}
 
 function variantTint(doc,view,cell){
   const type=doc.key, color=colorways[doc.options.Color];
@@ -258,42 +304,42 @@ function variantTint(doc,view,cell){
   }
   return '';
 }
-function photoProduct(doc,view,mini){
+function previewSurface(doc,view,detailSide=0){
+  if(isWrap(doc))return 0;
+  if(view==='Print Detail')return detailSide===1?1:0;
+  return view==='Back'?1:0;
+}
+function photoProduct(doc,view,mini,detailSide){
   const type=doc.key, photos=mockPhotos[type];
+  const viewIndex=previewSurface(doc,view,detailSide);
+  const surfaceView=view==='Print Detail'?productFor(doc).surfaces[viewIndex]:view;
   const keychainShape={Square:[16,106,282,148,302],Rectangle:[17,143,354,133,217]};
-  const mapping=doc.key==='keychain'?keychainShape[doc.options.Shape]:null;
-  const [cell,x0,x1,y0,y1,angle=0]=mapping||photos[view]||photos[defaultView(doc)];
+  const mapping=type==='keychain'?keychainShape[doc.options.Shape]:null;
+  const [cell,x0,x1,y0,y1]=mapping||photos[surfaceView]||photos[defaultView(doc)];
   const [w,h]=dimensions(doc), scope='proof'+(++svgSerial);
-  const viewIndex=view==='Back'&&!isWrap(doc)?1:0;
-  const outputW=x1-x0, outputH=y1-y0;
   let artwork='';
   if(isWrap(doc)){
-    const count=mini?14:42;
-    for(let i=0;i<count;i++){
-      const a=Math.asin(2*i/count-1),b=Math.asin(2*(i+1)/count-1);
-      const source=w*(.26+angle/360+a/(2*Math.PI));
-      const range=w*(b-a)/(2*Math.PI);
-      const x=x0+i*outputW/count, out=outputW/count+.18;
-      const arc=Math.pow((i+.5)/count*2-1,2)*9;
-      const top=y0+arc, height=outputH-arc;
-      const clip=scope+'Strip'+i;
-      const instances=[-w,0,w].map(shift=>'<use href="#'+scope+'Artwork" transform="translate('+x+' '+top+') scale('+(out/range)+' '+(height/h)+') translate('+(-source+shift)+' 0)"/>').join('');
-      artwork+='<clipPath id="'+clip+'"><rect x="'+x+'" y="'+top+'" width="'+out+'" height="'+height+'"/></clipPath><g clip-path="url(#'+clip+')">'+instances+'</g>';
-    }
+    artwork=wrapProjection(w,h,scope,cell,x0,mini);
   }else{
-    const inset=type==='keychain'&&doc.options.Shape==='Circle'?'<ellipse cx="'+((x0+x1)/2)+'" cy="'+((y0+y1)/2)+'" rx="'+(outputW/2)+'" ry="'+(outputH/2)+'"/>':'<rect x="'+x0+'" y="'+y0+'" width="'+outputW+'" height="'+outputH+'"/>';
-    artwork='<clipPath id="'+scope+'Face">'+inset+'</clipPath><g clip-path="url(#'+scope+'Face)"><use href="#'+scope+'Artwork" transform="translate('+x0+' '+y0+') scale('+(outputW/w)+' '+(outputH/h)+')"/></g>';
+    // Keep typography and images proportional within the photo's print area.
+    const cx=(x0+x1)/2,cy=(y0+y1)/2,scale=Math.min((x1-x0)/w,(y1-y0)/h);
+    const inset=type==='keychain'&&doc.options.Shape==='Circle'
+      ?'<ellipse cx="'+cx+'" cy="'+cy+'" rx="'+((x1-x0)/2)+'" ry="'+((y1-y0)/2)+'"/>'
+      :'<rect x="'+x0+'" y="'+y0+'" width="'+(x1-x0)+'" height="'+(y1-y0)+'"/>';
+    artwork='<clipPath id="'+scope+'Face">'+inset+'</clipPath><g clip-path="url(#'+scope+'Face)"><use href="#'+scope+'Artwork" transform="translate('+(cx-w*scale/2)+' '+(cy-h*scale/2)+') scale('+scale+')"/></g>';
   }
   const occlusion=type==='mug'&&view==='Handle'?'<mask id="'+scope+'Handle"><rect width="384" height="341" fill="white"/><rect x="172" y="92" width="44" height="179" rx="21" fill="black"/></mask>':'';
   const detail=view==='Print Detail'?' detail':'';
-  return '<div class="photo-proof'+detail+'" role="img" aria-label="'+safe(productFor(doc).name+' '+view)+'"><div class="photo-composite photo-cell-'+cell+'"><svg viewBox="0 0 384 341" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs><g id="'+scope+'Artwork">'+composition(doc,viewIndex,scope,false)+'</g>'+occlusion+'</defs>'+variantTint(doc,view,cell)+'<g'+(occlusion?' mask="url(#'+scope+'Handle)"':'')+'>'+artwork+'</g></svg></div></div>';
+  const label=productFor(doc).name+' '+(detail?surfaceView+' ': '')+view;
+  const sheet='<clipPath id="'+scope+'Sheet"><rect width="'+w+'" height="'+h+'"/></clipPath>';
+  return '<div class="photo-proof'+detail+'" role="img" aria-label="'+safe(label)+'"><div class="photo-composite photo-cell-'+cell+'"><svg viewBox="0 0 384 341" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>'+sheet+'<g id="'+scope+'Artwork" clip-path="url(#'+scope+'Sheet)">'+composition(doc,viewIndex,scope,false)+'</g>'+occlusion+'</defs>'+variantTint(doc,surfaceView,cell)+'<g'+(occlusion?' mask="url(#'+scope+'Handle)"':'')+'>'+artwork+'</g></svg></div></div>';
 }
-function productImage(doc,view=defaultView(doc),mini=false){
-  if(mockPhotos[doc.key])return photoProduct(doc,view,mini);
+function productImage(doc,view=defaultView(doc),mini=false,detailSide=0){
+  if(mockPhotos[doc.key])return photoProduct(doc,view,mini,detailSide);
   return planar(doc,view);
 }
 function mockup(doc,index=0,view=isWrap(doc)?'Center':productFor(doc).surfaces[index]) {
-  return '<div class="stage product-stage">'+productImage(doc,view)+'</div>';
+  return '<div class="stage product-stage">'+productImage(doc,view,false,index)+'</div>';
 }
 
 function openDesign(doc,line=null,initial='Design') {
@@ -362,14 +408,14 @@ function catalog(){
   const matches=catalogKeys.filter(key=>(!filter||filter===key)&&products[key].name.toLowerCase().includes(search.toLowerCase()));
   return '<section class="page-title"><h1>Shop custom products</h1><p>Choose a product and make it your own.</p></section><div class="catalog-controls"><input id="search" type="search" aria-label="Search products" placeholder="Search products" value="'+safe(search)+'"><select id="filter" aria-label="Product category"><option value="">All products</option>'+catalogKeys.map(key=>'<option value="'+key+'" '+(filter===key?'selected':'')+'>'+products[key].label+'</option>').join('')+'</select></div><div class="grid">'+(matches.length?productTiles(matches):'<p>No products match your search.</p>')+'</div>';
 }
-function previewButtons(doc,active,action,mini=true){
-  return '<div class="view-buttons '+(mini?'thumbs':'')+'">'+viewsFor(doc).map(([view])=>'<button type="button" data-action="'+action+'" data-value="'+view+'" aria-label="'+view+'" aria-pressed="'+(view===active)+'">'+(mini?productImage(doc,view,true):'')+'<span>'+view+'</span></button>').join('')+'</div>';
+function previewButtons(doc,active,action,mini=true,detailSide=0){
+  return '<div class="view-buttons '+(mini?'thumbs':'')+'">'+viewsFor(doc).map(([view])=>'<button type="button" data-action="'+action+'" data-value="'+view+'" aria-label="'+view+'" aria-pressed="'+(view===active)+'">'+(mini?productImage(doc,view,true,detailSide):'')+'<span>'+view+'</span></button>').join('')+'</div>';
 }
 function productView(){
   const p=productFor(design), sample=fresh(design.key,true);
   sample.options={...design.options};
   applyTemplate(sample,'morning');
-  return '<div class="breadcrumbs">'+button('All products','catalog')+'<span>/</span>'+p.name+'</div><div class="product-page"><section class="stack">'+mockup(sample,0,activeView)+previewButtons(sample,activeView,'view',false)+'</section><section class="panel stack"><h1>'+p.name+'</h1><p>'+p.intro+'</p><strong class="price">'+money(unit(design))+' each</strong>'+options(false)+'<div class="row">'+button('Start with a template','sample','','class="primary"')+button('Start from blank','blank')+'</div></section></div>';
+  return '<div class="breadcrumbs">'+button('All products','catalog')+'<span>/</span>'+p.name+'</div><div class="product-page"><section class="stack">'+mockup(sample,side,activeView)+previewButtons(sample,activeView,'view',false)+'</section><section class="panel stack"><h1>'+p.name+'</h1><p>'+p.intro+'</p><strong class="price">'+money(unit(design))+' each</strong>'+options(false)+'<div class="row">'+button('Start with a template','sample','','class="primary"')+button('Start from blank','blank')+'</div></section></div>';
 }
 function sideName(index,doc=design){return productFor(doc).surfaces[index];}
 function optionLabel(name,choices,current){
@@ -442,7 +488,7 @@ function canvas(){
 }
 function previewPanel(){
   const p=productFor(design);
-  return '<aside class="editor-preview"><h2>Product preview</h2><p>'+p.name+'</p><div id="live-product" class="live-product">'+productImage(design,activeView)+'</div>'+previewButtons(design,activeView,'view')+'</aside>';
+  return '<aside class="editor-preview"><h2>Product preview</h2><p>'+p.name+'</p><div id="live-product" class="live-product">'+productImage(design,activeView,false,side)+'</div>'+previewButtons(design,activeView,'view',true,side)+'</aside>';
 }
 function review(){
   const found=issues();
@@ -465,9 +511,10 @@ function editor(){
   const body={Details:details,Options:()=>'<h2>Product options</h2>'+options(),Review:review}[step]();
   return head+'<div class="editor-other"><div class="panel stack">'+body+'<strong id="design-price">'+designPrice()+'</strong></div>'+previewPanel()+'</div>';
 }
-function showProof(doc,view=defaultView(doc)){
-  preview={doc,view};
-  byId('proof-content').innerHTML='<div class="section-head"><h2>Product preview</h2><label>Zoom<select id="proof-zoom"><option value="1">100%</option><option value="1.5">150%</option><option value="2">200%</option></select></label></div><div class="proof-viewport">'+productImage(doc,view)+'</div>'+previewButtons(doc,view,'proof-view',false)+
+function showProof(doc,view=defaultView(doc),detailSide=0){
+  const index=previewSurface(doc,view,detailSide);
+  preview={doc,view,side:index};
+  byId('proof-content').innerHTML='<div class="section-head"><h2>Product preview</h2><label>Zoom<select id="proof-zoom"><option value="1">100%</option><option value="1.5">150%</option><option value="2">200%</option></select></label></div><div class="proof-viewport">'+productImage(doc,view,false,index)+'</div>'+previewButtons(doc,view,'proof-view',false)+
     '<p class="muted">'+Object.values(doc.options).map(safe).join(' · ')+'</p>';
   if(!byId('proof').open)byId('proof').showModal();
 }
@@ -527,7 +574,7 @@ function route(){
       openDesign(saved?.design||fresh(key),saved&&state.cart.some(line=>line.id===saved.editingId)?saved.editingId:null);
       return;
     }
-    design=fresh(key);activeView=defaultView(design);page=next;
+    design=fresh(key);side=0;activeView=defaultView(design);page=next;
   }else if(next==='checkout'&&!state.cart.length)page='cart';
   else if(next==='order'&&!state.orders.length)page='landing';
   else if(next==='product'||next==='editor')page='catalog';
@@ -563,7 +610,7 @@ function updateCart(action,lineId){
 const actions={
   home(){go('landing');},
   catalog(){go('catalog');},
-  product(key){design=fresh(key);activeView=defaultView(design);go('product',key);},
+  product(key){design=fresh(key);side=0;activeView=defaultView(design);go('product',key);},
   sample(){const doc=clone(design);applyTemplate(doc,'morning');openDesign(doc);},
   blank(){openDesign(design);},
   view(value){activeView=value;const index=productFor(design).surfaces.indexOf(value);if(index>=0){side=index;selected=null;}render();},
@@ -603,8 +650,8 @@ const actions={
   step(value){step=value;render();},
   side(value){side=Number(value);selected=null;activeView=sideName(side);render();},
   select(value){selected=value;if(activeTool!=='Layers')activeTool=toolFor(currentLayer());render();},
-  preview(){showProof(design,activeView);},
-  'proof-view'(value){showProof(preview.doc,value);},
+  preview(){showProof(design,activeView,side);},
+  'proof-view'(value){showProof(preview.doc,value,preview.side);},
   undo(){applyHistory(undo,redo);},
   redo(){applyHistory(redo,undo);},
   'save-exit'(){if(saveDraft()){go('landing');notify('Draft saved.');}},
@@ -728,6 +775,7 @@ document.addEventListener('change',async event=>{
   if(field.id==='proof-zoom'){
     const viewport=byId('proof-content').querySelector('.proof-viewport');
     viewport.style.setProperty('--proof-width',(Number(field.value)*100)+'%');
+    viewport.style.setProperty('--proof-scale',field.value);
     viewport.style.setProperty('--proof-max',(Number(field.value)*100)+'%');
   }
   if(option){
@@ -742,8 +790,8 @@ document.addEventListener('change',async event=>{
     editLayer(item=>item[property]=value,false);
     field.value=value;
     app.querySelector('.canvas-card .art').outerHTML=art(design,side,true);
-    byId('live-product').innerHTML=productImage(design,activeView);
-    app.querySelector('.editor-preview .thumbs').outerHTML=previewButtons(design,activeView,'view');
+    byId('live-product').innerHTML=productImage(design,activeView,false,side);
+    app.querySelector('.editor-preview .thumbs').outerHTML=previewButtons(design,activeView,'view',true,side);
     const label=app.querySelector('.layer-list button[data-value="'+selected+'"]');
     if(property==='text'&&label)label.textContent=value||'Text';
     refreshHistoryButtons();
@@ -767,8 +815,8 @@ function queueTextPreview(){
     textFrame=0;
     if(page!=='editor'||step!=='Design')return;
     app.querySelector('.canvas-card .art').outerHTML=art(design,side,true);
-    byId('live-product').innerHTML=productImage(design,activeView);
-    app.querySelector('.editor-preview .thumbs').outerHTML=previewButtons(design,activeView,'view');
+    byId('live-product').innerHTML=productImage(design,activeView,false,side);
+    app.querySelector('.editor-preview .thumbs').outerHTML=previewButtons(design,activeView,'view',true,side);
     const label=app.querySelector('.layer-list button[data-value="'+selected+'"]');
     if(label)label.textContent=currentLayer()?.text||'Text';
     refreshHistoryButtons();
