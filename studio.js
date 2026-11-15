@@ -1,13 +1,13 @@
 'use strict';
 
 const products = {
-  mug: {name:'Ceramic Mug', label:'Mugs', type:'mug', price:1695, surfaces:['Wrap'], inches:[8.5,3.5], intro:'Design a ceramic mug with a full print wrap and your choice of handle color.'},
-  tumbler: {name:'Insulated Tumbler', label:'Tumblers', type:'tumbler', price:2795, surfaces:['Wrap'], inches:[9.3,7.5], intro:'Personalize a stainless steel tumbler with artwork that wraps around the body.'},
-  shirt: {name:'Classic T-Shirt', label:'T-shirts', type:'shirt', price:2195, surfaces:['Front','Back'], inches:[11,14], intro:'Print original artwork on the front and back of a cotton crew neck.'},
-  bag: {name:'Canvas Tote Bag', label:'Bags', type:'bag', price:1895, surfaces:['Front','Back'], inches:[10,10], intro:'Customize both sides of a reusable cotton canvas tote.'},
-  keychain: {name:'Acrylic Keychain', label:'Keychains', type:'keychain', price:995, surfaces:['Front','Back'], inches:[2,2], intro:'Design both sides of a lightweight acrylic keychain.'},
-  photo: {name:'Sunday Photo Card', type:'card', price:165, color:'#f7e9dc', surfaces:['Front','Back'], inches:[5,7], intro:'A front photo and a message on the reverse.'},
-  note: {name:'Garden Note Card', type:'card', price:145, color:'#e7ecdb', surfaces:['Front','Back'], inches:[5,7], intro:'A two-sided note with an editable greeting.'}
+  mug: {name:'Ceramic Mug', label:'Mugs', type:'mug', price:2900, surfaces:['Wrap'], inches:[8.5,3.5], intro:'Design a ceramic mug with a full print wrap and your choice of handle color.'},
+  tumbler: {name:'Insulated Tumbler', label:'Tumblers', type:'tumbler', price:6900, surfaces:['Wrap'], inches:[9.3,7.5], intro:'Personalize a stainless steel tumbler with artwork that wraps around the body.'},
+  shirt: {name:'Classic T-Shirt', label:'T-shirts', type:'shirt', price:4900, surfaces:['Front','Back'], inches:[11,14], intro:'Print original artwork on the front and back of a cotton crew neck.'},
+  bag: {name:'Canvas Tote Bag', label:'Bags', type:'bag', price:3900, surfaces:['Front','Back'], inches:[10,10], intro:'Customize both sides of a reusable cotton canvas tote.'},
+  keychain: {name:'Acrylic Keychain', label:'Keychains', type:'keychain', price:1900, surfaces:['Front','Back'], inches:[2,2], intro:'Design both sides of a lightweight acrylic keychain.'},
+  photo: {name:'Sunday Photo Card', type:'card', price:600, color:'#f7e9dc', surfaces:['Front','Back'], inches:[5,7], intro:'A front photo and a message on the reverse.'},
+  note: {name:'Garden Note Card', type:'card', price:500, color:'#e7ecdb', surfaces:['Front','Back'], inches:[5,7], intro:'A two-sided note with an editable greeting.'}
 };
 const colorways = {White:'#f6f4ee', Ivory:'#f0e7d4', Black:'#282832', Cobalt:'#3856aa', Forest:'#285243', Natural:'#d6bf95', Blush:'#e6b9b0', Clear:'#d7e7ed'};
 const optionSets = {
@@ -58,16 +58,23 @@ function layerName(item){
   if(item.kind==='shape')return item.shape;
   return item.text||'Text';
 }
-const shipping = {Standard:699, Express:1599};
+// Sample amounts in fils for the approval preview.
+const emirateDelivery = {
+  Dubai:1500, 'Abu Dhabi':2200, Sharjah:1800, Ajman:1800,
+  'Umm Al Quwain':2500, 'Ras Al Khaimah':2500, Fujairah:2500
+};
+const expressSurcharge=1500, designReviewPrice=1500;
+const whatsappUrl='https://wa.me/971566344539';
 const storageKey = 'print-studio-v1';
 const byId = id => document.getElementById(id);
 const id = () => crypto.randomUUID();
 const clone = value => structuredClone(value);
-const money = cents => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(cents/100);
+const aedAmounts=new Intl.NumberFormat('en-AE',{minimumFractionDigits:2,maximumFractionDigits:2});
+const money = fils => 'AED '+aedAmounts.format(fils/100);
 const safe = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const button = (label,action,data='',extra='') => '<button type="button" data-action="'+action+'" data-value="'+safe(data)+'" '+extra+'>'+safe(label)+'</button>';
 const app = byId('app');
-let state = {cart:[], saved:[], orders:[], draft:null, promo:false};
+let state = {cart:[], saved:[], orders:[], draft:null, promo:false, emirate:''};
 try { state={...state,...JSON.parse(localStorage.getItem(storageKey))}; } catch {}
 let page='landing', design, side=0, step='Design', selected=null, preview=null, filter='', search='';
 let undo=[], redo=[], editingId=null, noticeTimer, drag=null, address=null, delivery='Standard', protection=false;
@@ -75,6 +82,8 @@ let undo=[], redo=[], editingId=null, noticeTimer, drag=null, address=null, deli
 const historyApi=window.history;
 let activeTool='Templates',activeView='Center',zoom=100,showGuides=true,showGrid=false,showRuler=true,snapToGrid=false,saveStatus='Draft';
 let giftMessage='';
+let toolPanelOpen=false;
+const mobileEditor=window.matchMedia('(max-width: 780px)');
 function notify(message) {
   byId('notice').textContent=message;
   clearTimeout(noticeTimer);
@@ -293,16 +302,35 @@ function variantTint(doc,view,cell){
     tumbler:{1:'M127 74 H257 L240 283 Q193 304 142 283 Z',12:'M110 82 H267 L251 303 Q192 330 130 303 Z',13:'M114 82 H273 L251 303 Q195 330 137 303 Z',14:'M114 69 H271 L252 305 Q190 329 130 305 Z',15:'M94 150 Q181 196 283 141 L252 298 Q190 337 130 291 Z',19:'M118 65 H270 L257 305 Q193 330 130 300 Z'}
   };
   const mask=shapeMasks[type]?.[cell];
-  const tinted=mask&&color&&!['White','Natural'].includes(doc.options.Color)?
-    '<path d="'+mask+'" fill="'+color+'" opacity=".88" style="mix-blend-mode:multiply"/>':'';
+  if(type==='keychain'){
+    const faces={
+      4:'<ellipse cx="193" cy="227" rx="85" ry="84" />',
+      16:'<rect x="106" y="148" width="176" height="154" rx="22" />',
+      17:'<rect x="143" y="133" width="211" height="84" rx="18" />'
+    };
+    const rings={4:[193,72,53,53],16:[193,72,53,51],17:[66,174,48,46]};
+    const face=doc.options.Color==='White'?'<g fill="#fff" opacity=".56">'+faces[cell]+'</g>':'';
+    if(doc.options.Hardware!=='Gold')return face;
+    const [cx,cy,rx,ry]=rings[cell];
+    return face+'<ellipse cx="'+cx+'" cy="'+cy+'" rx="'+rx+'" ry="'+ry+'" fill="none" stroke="#bb8f38" stroke-width="4" opacity=".75"/>';
+  }
+  const tintWhite=type==='bag'&&doc.options.Color==='White';
+  const tinted=mask&&color&&(tintWhite||!['White','Natural'].includes(doc.options.Color))?
+    '<path d="'+mask+'" fill="'+(tintWhite?'#fff':color)+'" opacity="'+(tintWhite?.5:.74)+'"/>':'';
   if(type!=='mug')return tinted;
+  const [top,bottom]=wrapBands[cell];
+  const body=doc.options.Finish==='Warm ivory'
+    ?'<path d="M'+top[0]+' '+top[2]+' Q'+((top[0]+top[1])/2)+' '+((top[2]+top[3])/2+top[4]*2)+' '+top[1]+' '+top[3]+
+      ' L'+bottom[1]+' '+bottom[3]+' Q'+((bottom[0]+bottom[1])/2)+' '+((bottom[2]+bottom[3])/2+bottom[4]*2)+' '+bottom[0]+' '+bottom[2]+
+      ' Z" fill="#efcf8c" opacity=".29"/>':'';
+
   if(doc.options.Style==='Classic'||doc.options.Color==='Black'||doc.options.Color==='Cobalt'){
     const rim={0:[185,89,80,14],5:[211,54,83,12],6:[210,67,84,21],7:[167,61,83,19],8:[186,61,85,16],9:[193,59,86,16],10:[224,89,71,11]}[cell];
     const handles={0:'M267 111 C337 110 350 237 267 243',5:'M123 84 C49 80 34 211 123 231',6:'M126 83 C58 82 34 211 126 228',7:'M253 86 C342 74 360 232 253 236',8:'M272 95 C342 88 336 233 272 242',9:'M192 99 V254',10:'M294 110 C363 104 367 211 294 223'};
     const tintColor=doc.options.Style==='Classic'?'#e1dfd8':color;
-    return '<ellipse cx="'+rim[0]+'" cy="'+rim[1]+'" rx="'+rim[2]+'" ry="'+rim[3]+'" fill="'+tintColor+'" opacity=".83"/><path d="'+handles[cell]+'" stroke="'+tintColor+'" opacity=".83" stroke-width="'+(view==='Handle'?32:13)+'" fill="none" stroke-linecap="round"/>';
+    return body+'<ellipse cx="'+rim[0]+'" cy="'+rim[1]+'" rx="'+rim[2]+'" ry="'+rim[3]+'" fill="'+tintColor+'" opacity=".83"/><path d="'+handles[cell]+'" stroke="'+tintColor+'" opacity=".83" stroke-width="'+(view==='Handle'?32:13)+'" fill="none" stroke-linecap="round"/>';
   }
-  return '';
+  return body;
 }
 function previewSurface(doc,view,detailSide=0){
   if(isWrap(doc))return 0;
@@ -332,7 +360,9 @@ function photoProduct(doc,view,mini,detailSide){
   const detail=view==='Print Detail'?' detail':'';
   const label=productFor(doc).name+' '+(detail?surfaceView+' ': '')+view;
   const sheet='<clipPath id="'+scope+'Sheet"><rect width="'+w+'" height="'+h+'"/></clipPath>';
-  return '<div class="photo-proof'+detail+'" role="img" aria-label="'+safe(label)+'"><div class="photo-composite photo-cell-'+cell+'"><svg viewBox="0 0 384 341" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>'+sheet+'<g id="'+scope+'Artwork" clip-path="url(#'+scope+'Sheet)">'+composition(doc,viewIndex,scope,false)+'</g>'+occlusion+'</defs>'+variantTint(doc,surfaceView,cell)+'<g'+(occlusion?' mask="url(#'+scope+'Handle)"':'')+'>'+artwork+'</g></svg></div></div>';
+  const tint=variantTint(doc,surfaceView,cell);
+  const tintLayer=tint?'<svg class="variant-tint" viewBox="0 0 384 341" aria-hidden="true">'+tint+'</svg>':'';
+  return '<div class="photo-proof'+detail+'" role="img" aria-label="'+safe(label)+'"><div class="photo-composite photo-cell-'+cell+'">'+tintLayer+'<svg viewBox="0 0 384 341" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>'+sheet+'<g id="'+scope+'Artwork" clip-path="url(#'+scope+'Sheet)">'+composition(doc,viewIndex,scope,false)+'</g>'+occlusion+'</defs><g'+(occlusion?' mask="url(#'+scope+'Handle)"':'')+'>'+artwork+'</g></svg></div></div>';
 }
 function productImage(doc,view=defaultView(doc),mini=false,detailSide=0){
   if(mockPhotos[doc.key])return photoProduct(doc,view,mini,detailSide);
@@ -344,7 +374,7 @@ function mockup(doc,index=0,view=isWrap(doc)?'Center':productFor(doc).surfaces[i
 
 function openDesign(doc,line=null,initial='Design') {
   design=clone(doc); editingId=line; side=0; selected=null; undo=[]; redo=[]; step=initial;
-  activeTool='Templates'; activeView=defaultView(design); zoom=100;
+  activeTool='Templates'; activeView=defaultView(design); zoom=100; toolPanelOpen=false;
   saveStatus='Draft';saveDraft();go('editor',design.key);
 }
 function saveDraft() {
@@ -396,12 +426,13 @@ function issues(){
 function productTiles(keys){
   return keys.map(key=>{
     const sample=fresh(key,true);
+    const lowest=products[key].price+Object.values(availableOptions(sample)).reduce((total,choices)=>total+Math.min(...Object.values(choices)),0);
     return '<article class="tile">'+button('', 'product',key,'class="tile-media" aria-label="'+products[key].name+'"').replace('></button>','>'+productImage(sample,defaultView(sample),true)+'</button>')+
-      '<div class="tile-info"><h2>'+products[key].name+'</h2><span>From '+money(products[key].price)+'</span>'+button('Customize','product',key,'class="tile-action"')+'</div></article>';
+      '<div class="tile-info"><h2>'+products[key].name+'</h2><span>From '+money(lowest)+'</span>'+button('Customize','product',key,'class="tile-action"')+'</div></article>';
   }).join('');
 }
 function landing(){
-  return '<section class="landing-hero"><div class="landing-copy"><p class="eyebrow">Custom printing</p><h1>Make it<br>yours.</h1><p>Upload a photo, add your artwork, or start with a template. See your design on the product before you order.</p><div class="row">'+button('Shop products','catalog','','class="primary"')+button('Design a mug','product','mug')+'</div></div><div class="hero-photo" role="img" aria-label="A personalized mug, tumbler, canvas bag, T-shirt, and keychain"></div></section>'+
+  return '<section class="landing-hero"><div class="landing-copy"><p class="eyebrow">Al Nafees Custom Studio</p><h1>Your design.<br><em>Your product.</em></h1><p>Personalize mugs, tumblers, T-shirts, totes and keychains with your own photo, logo or message. See how it looks before you order.</p><div class="row">'+button('Shop products','catalog','','class="primary"')+button('Design a mug','product','mug')+'</div></div><div class="hero-photo" role="img" aria-label="A personalized mug, tumbler, canvas bag, T-shirt, and keychain"></div></section>'+
     '<section class="landing-products"><div class="section-head"><h2>Choose a product</h2>'+button('View all','catalog')+'</div><div class="grid">'+productTiles(catalogKeys)+'</div></section>';
 }
 function catalog(){
@@ -411,15 +442,21 @@ function catalog(){
 function previewButtons(doc,active,action,mini=true,detailSide=0){
   return '<div class="view-buttons '+(mini?'thumbs':'')+'">'+viewsFor(doc).map(([view])=>'<button type="button" data-action="'+action+'" data-value="'+view+'" aria-label="'+view+'" aria-pressed="'+(view===active)+'">'+(mini?productImage(doc,view,true,detailSide):'')+'<span>'+view+'</span></button>').join('')+'</div>';
 }
+function customerSupport(){
+  return '<section class="customer-support" aria-label="Order support"><h2>Need help with your order?</h2>'+
+    '<p>Ask about returns or replacements for personalized items. The policy is pending approval.</p>'+
+    '<a href="'+whatsappUrl+'" target="_blank" rel="noopener noreferrer">WhatsApp Al Nafees</a></section>';
+}
 function productView(){
   const p=productFor(design), sample=fresh(design.key,true);
   sample.options={...design.options};
   applyTemplate(sample,'morning');
-  return '<div class="breadcrumbs">'+button('All products','catalog')+'<span>/</span>'+p.name+'</div><div class="product-page"><section class="stack">'+mockup(sample,side,activeView)+previewButtons(sample,activeView,'view',false)+'</section><section class="panel stack"><h1>'+p.name+'</h1><p>'+p.intro+'</p><strong class="price">'+money(unit(design))+' each</strong>'+options(false)+'<div class="row">'+button('Start with a template','sample','','class="primary"')+button('Start from blank','blank')+'</div></section></div>';
+  return '<div class="breadcrumbs">'+button('All products','catalog')+'<span>/</span>'+p.name+'</div><div class="product-page"><section class="stack">'+mockup(sample,side,activeView)+previewButtons(sample,activeView,'view',false)+'</section><section class="panel stack"><h1>'+p.name+'</h1><p>'+p.intro+'</p><strong class="price">'+money(unit(design))+' each</strong>'+options(false)+'<div class="row">'+button('Start with a template','sample','','class="primary"')+button('Start from blank','blank')+'</div>'+customerSupport()+'</section></div>';
 }
 function sideName(index,doc=design){return productFor(doc).surfaces[index];}
 function optionLabel(name,choices,current){
-  return '<label>'+name+'<select data-option="'+name+'">'+Object.entries(choices).map(([value,price])=>'<option value="'+safe(value)+'" '+(current===value?'selected':'')+'>'+value+(price?' ('+(price>0?'+':'−')+money(Math.abs(price))+')':'')+'</option>').join('')+'</select></label>';
+  const label=design.key==='mug'&&name==='Color'?'Handle & rim color':name;
+  return '<label>'+safe(label)+'<select data-option="'+name+'">'+Object.entries(choices).map(([value,price])=>'<option value="'+safe(value)+'" '+(current===value?'selected':'')+'>'+value+(price?' ('+(price>0?'+':'−')+money(Math.abs(price))+')':'')+'</option>').join('')+'</select></label>';
 }
 function options(includeQty=true){
   return '<div class="options">'+Object.entries(availableOptions(design)).map(([name,choices])=>optionLabel(name,choices,design.options[name])).join('')+(includeQty?quantityInput():'')+'</div>';
@@ -459,8 +496,9 @@ function layerList(){
 }
 function controls(){
   const item=currentLayer();
-  const labels={Edit:'Personalize',Text:'Text',Uploads:'Uploads',Background:'Background',Templates:'Templates',Elements:'Elements',Icons:'Icons',Layers:'Layers',Effects:'Effects',Crop:'Crop image',Align:'Alignment'};
+  const labels={Edit:'Personalize',Text:'Text',Uploads:'Uploads',Background:'Background',Templates:'Templates',Elements:'Elements',Icons:'Icons',Layers:'Layers',Effects:'Effects',Crop:'Crop image',Align:'Alignment',Product:'Product options'};
   const panels={
+    Product:()=>options(false),
     Edit:()=>layerList()+properties(item),
     Text:()=>button('Add text','add-text','','class="primary"')+(item?.kind==='text'?properties(item):''),
     Uploads:()=>input('Upload image','type="file" accept="image/png,image/jpeg,image/webp" data-upload="add"')+(item?.kind==='photo'?properties(item):''),
@@ -473,7 +511,9 @@ function controls(){
     Crop:()=>properties(item),
     Align:()=>properties(item)
   };
-  return '<h2>'+labels[activeTool]+'</h2>'+panels[activeTool]();
+  return '<div class="inspector-head"><h2>'+labels[activeTool]+'</h2>'+
+    button('Close tools','close-tools','','class="mobile-close-tools"')+'</div>'+
+    '<div class="inspector-body">'+panels[activeTool]()+'</div>';
 }
 const iconNames=['Sparkle','Sun','Heart','Flower','Moon','Star','Outline sparkle','Diamond'];
 function contextToolbar(){
@@ -482,9 +522,15 @@ function contextToolbar(){
   const edit=item.kind==='text'?button('Edit text','tool','Text'):item.kind==='photo'?button('Replace','tool','Uploads')+button('Crop','tool','Crop')+button('Fit','fit','Fit')+button('Fill','fit','Fill'):'';
   return edit+button('Align','tool','Align')+button('Effects','tool','Effects')+button('Duplicate','duplicate')+button('Delete','delete');
 }
-function canvas(){
+function canvas(inlinePreview=''){
   const [w,h]=inchesFor(design);
-  return '<div class="design-center"><div class="context-toolbar">'+contextToolbar()+'</div><div class="canvas-scroll"><div class="canvas-card '+(showGrid?'show-grid':'')+'" style="--zoom:'+zoom+';--aspect:'+dimensions(design).join('/')+'">'+art(design,side,true)+'</div>'+(showRuler?'<div class="ruler">'+w+' × '+h+' in</div>':'')+'</div><div class="canvas-controls">'+button('−','zoom','-25','aria-label="Zoom out"')+'<span>'+zoom+'%</span>'+button('+','zoom','25','aria-label="Zoom in"')+button('Fit','zoom-fit')+button('Guides','guides','','aria-pressed="'+showGuides+'"')+button('Grid','grid','','aria-pressed="'+showGrid+'"')+button('Ruler','ruler','','aria-pressed="'+showRuler+'"')+button('Snap','snap','','aria-pressed="'+snapToGrid+'"')+'</div></div>';
+  const sides=isWrap(design)?'':productFor(design).surfaces.map((name,index)=>
+    button(name,'side',index,'aria-pressed="'+(side===index)+'"')).join('');
+  const quick='<div class="mobile-design-actions">'+
+    button('Product','tool','Product','aria-label="Product options" aria-controls="design-tools" aria-expanded="'+(activeTool==='Product'&&toolPanelOpen)+'"')+sides+
+    button('↶','undo','','aria-label="Undo" '+(undo.length?'':'disabled'))+
+    button('↷','redo','','aria-label="Redo" '+(redo.length?'':'disabled'))+'</div>';
+  return '<div class="design-center">'+quick+'<div class="context-toolbar">'+contextToolbar()+'</div><div class="workspace-surfaces'+(design.key==='mug'?' mug-workspace':'')+'">'+inlinePreview+'<div class="canvas-scroll"><div class="canvas-card '+(showGrid?'show-grid':'')+'" style="--zoom:'+zoom+';--aspect:'+dimensions(design).join('/')+'">'+art(design,side,true)+'</div>'+(showRuler?'<div class="ruler">'+w+' × '+h+' in</div>':'')+'</div></div><div class="canvas-controls">'+button('−','zoom','-25','aria-label="Zoom out"')+'<span>'+zoom+'%</span>'+button('+','zoom','25','aria-label="Zoom in"')+button('Fit','zoom-fit')+button('Guides','guides','','aria-pressed="'+showGuides+'"')+button('Grid','grid','','aria-pressed="'+showGrid+'"')+button('Ruler','ruler','','aria-pressed="'+showRuler+'"')+button('Snap','snap','','aria-pressed="'+snapToGrid+'"')+'</div></div>';
 }
 function previewPanel(){
   const p=productFor(design);
@@ -503,9 +549,17 @@ function editor(){
   const nextButton=next?button('Next: '+next,'step',next,'class="primary"'):button(editingId?'Update cart item':'Add to cart','add-cart','','class="primary"');
   const head='<div class="editor-head">'+button('Save & exit','save-exit')+'<span id="save-status" class="saved">✓ '+saveStatus+'</span>'+steps+button('Preview','preview')+nextButton+'</div>';
   if(step==='Design'){
-    const rail='<nav class="tool-rail" aria-label="Design tools">'+toolItems.map(([name,icon])=>'<button type="button" data-action="tool" data-value="'+name+'" aria-pressed="'+(activeTool===name)+'"><span aria-hidden="true">'+icon+'</span>'+name+'</button>').join('')+'</nav>';
-    return head+'<div class="editor-layout">'+rail+'<aside class="inspector stack">'+controls()+'<div class="row history">'+button('Undo','undo','',undo.length?'':'disabled')+button('Redo','redo','',redo.length?'':'disabled')+'</div></aside>'+
-      canvas()+previewPanel()+'</div>';
+    const tools=mobileEditor.matches?toolItems:[['Product','◫'],...toolItems];
+    const rail='<nav class="tool-rail" aria-label="Design tools">'+tools.map(([name,icon])=>
+      '<button type="button" data-action="tool" data-value="'+name+'" aria-controls="design-tools" aria-pressed="'+
+      (activeTool===name&&(!mobileEditor.matches||toolPanelOpen))+'"><span aria-hidden="true">'+icon+'</span>'+name+'</button>').join('')+'</nav>';
+    const inspector='<aside id="design-tools" class="inspector stack" data-tool="'+safe(activeTool)+'">'+
+      controls()+'<div class="row history">'+button('Undo','undo','',undo.length?'':'disabled')+
+      button('Redo','redo','',redo.length?'':'disabled')+'</div></aside>';
+    const photoPreview=previewPanel();
+    const mobile=mobileEditor.matches;
+    return head+'<div class="editor-layout'+(toolPanelOpen?' tools-open':'')+'">'+rail+inspector+
+      canvas(mobile?photoPreview:'')+(mobile?'':photoPreview)+'</div>';
   }
   const details=()=>'<h2>Personalize</h2><form id="details" class="stack">'+input('Name','name="name" maxlength="70"')+input('Greeting','name="greeting" maxlength="70"')+'<label>Message on back<textarea name="message" maxlength="250"></textarea></label><button class="primary">Apply details</button></form>';
   const body={Details:details,Options:()=>'<h2>Product options</h2>'+options(),Review:review}[step]();
@@ -519,14 +573,32 @@ function showProof(doc,view=defaultView(doc),detailSide=0){
   if(!byId('proof').open)byId('proof').showModal();
 }
 function subtotal(){return state.cart.reduce((sum,line)=>sum+unit(line.design)*line.design.quantity,0);}
-function totals(quoted=false){
-  const base=subtotal(), discount=state.promo?Math.round(base*.1):0;
-  const fee=protection?399:0;
-  const freight=quoted?shipping[delivery]+(address.country==='Canada'?500:0):0;
-  const tax=quoted?Math.round((base-discount+fee)*({NY:.08875,CA:.0725,ON:.13}[address.region.toUpperCase()]??0)):0;
-  const total=base-discount+fee+freight+tax;
-  const rows=[['Subtotal',money(base)],['Discount','−'+money(discount)],['Design review',money(fee)],['Shipping',quoted?money(freight):'At checkout'],['Estimated tax',quoted?money(tax):'At checkout'],['Total',money(total)]];
+function deliverySelector(inForm=false){
+  const options=Object.keys(emirateDelivery).map(name=>'<option value="'+name+'" '+(state.emirate===name?'selected':'')+'>'+name+'</option>').join('');
+  return '<label>Emirate<select id="delivery-emirate"'+(inForm?' name="emirate" required':'')+'>'+
+    '<option value="">Select your emirate</option>'+options+'</select></label>';
+}
+function deliveryMethod(){
+  return '<label>Delivery speed<select id="delivery">'+['Standard','Express'].map(name=>
+    '<option '+(name===delivery?'selected':'')+'>'+name+'</option>').join('')+'</select></label>';
+}
+function totals(){
+  const base=subtotal();
+  const discount=state.promo?Math.round(base*.1):0;
+  const review=protection?designReviewPrice:0;
+  const hasEmirate=Object.hasOwn(emirateDelivery,state.emirate);
+  const freight=hasEmirate?emirateDelivery[state.emirate]+(delivery==='Express'?expressSurcharge:0):0;
+  const total=base-discount+review+freight;
+  const rows=[['Subtotal',money(base)]];
+  if(discount)rows.push(['Discount','−'+money(discount)]);
+  if(review)rows.push(['Design review',money(review)]);
+  rows.push(['Delivery',hasEmirate?money(freight):'Select your emirate']);
+  rows.push([hasEmirate?'Estimated total':'Before delivery',money(total)]);
   return {total,html:'<div class="totals">'+rows.map(([key,value])=>'<div><span>'+key+'</span><strong>'+value+'</strong></div>').join('')+'</div>'};
+}
+function refreshTotals(){
+  const summary=app.querySelector('.totals');
+  if(summary)summary.outerHTML=totals().html;
 }
 function cartLine(line,saved=false) {
   const doc=line.design;
@@ -537,26 +609,51 @@ function cartLine(line,saved=false) {
 function cart(){
   return '<h1>Your cart</h1><div class="checkout"><section class="stack">'+(state.cart.map(line=>cartLine(line)).join('')||'<p>Your cart is empty.</p>'+button('Shop products','catalog'))+
     (state.saved.length?'<h2>Saved for later</h2>'+state.saved.map(line=>cartLine(line,true)).join(''):'')+'</section>'+
-    (state.cart.length?'<aside class="panel stack"><h2>Order summary</h2><form id="promo" class="stack">'+input('Promo code','name="code" placeholder="Try STUDIO10" required')+'<button>Apply</button></form>'+
-    (state.promo?button('Remove STUDIO10','remove-promo'):'')+totals().html+button('Checkout','checkout','','class="primary"')+'</aside>':'')+'</div>';
+    (state.cart.length?'<aside class="panel stack"><h2>Order summary</h2>'+deliverySelector()+deliveryMethod()+
+    '<div aria-live="polite">'+totals().html+'</div>'+
+    '<form id="promo" class="promo-form">'+input('Promo code','name="code" placeholder="Try STUDIO10" required')+'<button>Apply</button></form>'+
+    (state.promo?button('Remove STUDIO10','remove-promo'):'')+button('Checkout','checkout','','class="primary"')+customerSupport()+'</aside>':'')+'</div>';
 }
 function checkout(){
   const field=(label,name,extra='')=>input(label,'name="'+name+'" value="'+safe(address?.[name])+'" required '+extra);
-  return '<h1>Checkout</h1><div class="checkout"><section class="panel stack"><h2>Delivery</h2><form id="address" class="stack">'+field('Full name','name','autocomplete="name"')+field('Email','email','type="email" autocomplete="email"')+
-    '<label>Country<select name="country"><option>United States</option><option '+(address?.country==='Canada'?'selected':'')+'>Canada</option></select></label>'+
-    field('Street address','street','autocomplete="street-address"')+field('City','city')+field('State or province code','region','pattern="[A-Za-z]{2}" maxlength="2"')+field('Postal code','postal','autocomplete="postal-code"')+'<button>Calculate shipping</button></form>'+
-    (address?'<section id="quoted" class="stack"><h2>Shipping method</h2><label>Delivery speed<select id="delivery">'+Object.entries(shipping).map(([name,price])=>'<option value="'+name+'" '+(name===delivery?'selected':'')+'>'+name+' · '+money(price+(address.country==='Canada'?500:0))+'</option>').join('')+'</select></label><label>Gift message<textarea id="gift-message" maxlength="200">'+safe(giftMessage)+'</textarea></label><h2>Payment</h2><p>Test checkout. The order is recorded in this browser and no money is collected.</p>'+button('Place test order','place','','class="primary"')+'</section>':'')+'</section>'+
-    '<aside class="panel stack"><h2>Order summary</h2>'+state.cart.map(line=>'<div class="checkout-item">'+productImage(line.design,defaultView(line.design),true)+'<div><strong>'+productFor(line.design).name+'</strong><p>Quantity '+line.design.quantity+'</p>'+button('Preview','cart-preview',line.id)+'</div></div>').join('')+'<label style="display:block"><input type="checkbox" id="protection" '+(protection?'checked':'')+'> Design review · $3.99</label>'+totals(Boolean(address)).html+button('Back to cart','cart')+'</aside></div>';
+  return '<h1>Checkout</h1><div class="checkout"><section class="panel stack"><h2>Delivery details</h2>'+
+    '<p>Use sample contact details for this test order.</p><form id="address" class="stack">'+
+    field('Full name','name','autocomplete="name"')+field('Email','email','type="email" autocomplete="email"')+
+    deliverySelector(true)+field('Building and street address','street','autocomplete="street-address"')+
+    field('City or area','city','autocomplete="address-level2"')+
+    '<button>Confirm delivery details</button></form>'+
+    (address?'<section id="quoted" class="stack"><label>Gift message<textarea id="gift-message" maxlength="200">'+safe(giftMessage)+'</textarea></label>'+
+    '<h2>Test order</h2><p>Your test order stays in this browser. This checkout does not collect payment.</p>'+
+    button('Place test order','place','','class="primary"')+'</section>':'')+'</section>'+
+    '<aside class="panel stack"><h2>Order summary</h2>'+state.cart.map(line=>'<div class="checkout-item">'+
+    productImage(line.design,defaultView(line.design),true)+'<div><strong>'+productFor(line.design).name+
+    '</strong><p>Quantity '+line.design.quantity+'</p>'+button('Preview','cart-preview',line.id)+'</div></div>').join('')+
+    deliveryMethod()+'<label class="review-extras"><input type="checkbox" id="protection" '+(protection?'checked':'')+
+    '> Design review · '+money(designReviewPrice)+'</label><div aria-live="polite">'+totals().html+'</div>'+
+    button('Back to cart','cart')+customerSupport()+'</aside></div>';
 }
 function orderView(){
   const order=state.orders.at(-1);
-  return '<section class="hero"><h1>Test order placed</h1><p>Order '+safe(order.id.slice(0,8).toUpperCase())+' · '+money(order.total)+'</p>'+button('Continue shopping','home','','class="primary"')+'</section><div class="grid">'+order.items.map(line=>'<article class="tile">'+mockup(line.design)+'<div class="tile-info"><h2>'+products[line.design.key].name+'</h2><p>Quantity '+line.design.quantity+'</p><div class="row">'+button('View order proof','order-preview',line.id)+line.design.surfaces.map((_,index)=>button('Export '+sideName(index,line.design).toLowerCase(),'export',line.id+':'+index)).join('')+'</div></div></article>').join('')+'</div>';
+  return '<section class="hero"><h1>Test order placed</h1><p>Order '+safe(order.id.slice(0,8).toUpperCase())+' · '+(order.currency==='AED'?money(order.total):new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(order.total/100))+'</p>'+button('Continue shopping','home','','class="primary"')+'</section><div class="grid">'+order.items.map(line=>'<article class="tile">'+mockup(line.design)+'<div class="tile-info"><h2>'+products[line.design.key].name+'</h2><p>Quantity '+line.design.quantity+'</p><div class="row">'+button('View order proof','order-preview',line.id)+line.design.surfaces.map((_,index)=>button('Export '+sideName(index,line.design).toLowerCase(),'export',line.id+':'+index)).join('')+'</div></div></article>').join('')+'</div>';
+}
+function animateProductView(photo){
+  if(!photo||window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  photo.animate([{opacity:.42},{opacity:1}],{duration:190,easing:'ease-out'});
 }
 function updateCount(){byId('count').textContent=state.cart.reduce((sum,line)=>sum+line.design.quantity,0);}
 function render(){
   const views={landing,catalog,product:productView,editor,cart,checkout,order:orderView};
   document.body.classList.toggle('design-page',page==='editor');
-  app.innerHTML=views[page]();updateCount();
+  const railScroll=app.querySelector('.tool-rail')?.scrollLeft||0;
+  const previousInspector=app.querySelector('.inspector');
+  const panelScroll=previousInspector?.dataset.tool===activeTool
+    ?previousInspector.querySelector('.inspector-body').scrollTop:0;
+  app.innerHTML=views[page]();
+  const rail=app.querySelector('.tool-rail');
+  if(rail)rail.scrollLeft=railScroll;
+  const inspectorBody=app.querySelector('.inspector-body');
+  if(inspectorBody)inspectorBody.scrollTop=panelScroll;
+  updateCount();
 }
 function go(next,key=''){
   page=next;
@@ -613,16 +710,22 @@ const actions={
   product(key){design=fresh(key);side=0;activeView=defaultView(design);go('product',key);},
   sample(){const doc=clone(design);applyTemplate(doc,'morning');openDesign(doc);},
   blank(){openDesign(design);},
-  view(value){activeView=value;const index=productFor(design).surfaces.indexOf(value);if(index>=0){side=index;selected=null;}render();},
+  view(value){
+    const changed=value!==activeView;
+    activeView=value;
+    const index=productFor(design).surfaces.indexOf(value);
+    if(index>=0){side=index;selected=null;}
+    render();
+    if(changed)animateProductView(app.querySelector('.product-stage .photo-proof, #live-product .photo-proof'));
+  },
   tool(value){
     activeTool=value;
+    toolPanelOpen=true;
     render();
-    if(!window.matchMedia('(max-width: 780px)').matches)return;
-    const inspector=app.querySelector('.inspector');
-    if(!inspector)return;
-    const top=inspector.getBoundingClientRect().top;
-    const target=window.innerHeight*.58;
-    if(top>target)window.scrollBy(0,top-target);
+  },
+  'close-tools'(){
+    toolPanelOpen=false;
+    render();
   },
   zoom(value){zoom=Math.max(50,Math.min(250,zoom+Number(value)));render();},
   'zoom-fit'(){zoom=100;render();},
@@ -656,11 +759,15 @@ const actions={
   cart(){go('cart');},
   draft(){if(state.draft)openDesign(state.draft.design,state.cart.some(line=>line.id===state.draft.editingId)?state.draft.editingId:null);else notify('No saved draft yet.');},
 
-  step(value){step=value;render();},
+  step(value){step=value;toolPanelOpen=false;render();},
   side(value){side=Number(value);selected=null;activeView=sideName(side);render();},
   select(value){selected=value;if(activeTool!=='Layers')activeTool=toolFor(currentLayer());render();},
   preview(){showProof(design,activeView,side);},
-  'proof-view'(value){showProof(preview.doc,value,preview.side);},
+  'proof-view'(value){
+    const changed=value!==preview.view;
+    showProof(preview.doc,value,preview.side);
+    if(changed)animateProductView(byId('proof-content').querySelector('.photo-proof'));
+  },
   undo(){applyHistory(undo,redo);},
   redo(){applyHistory(redo,undo);},
   'save-exit'(){if(saveDraft()){go('landing');notify('Draft saved.');}},
@@ -690,8 +797,8 @@ const actions={
   'remove-promo'(){if(persist({...state,promo:false}))render();},
   checkout(){if(state.cart.length)go('checkout');},
   place(){
-    if(!address||!state.cart.length)return;
-    const order={id:id(),items:clone(state.cart),total:totals(true).total,delivery,giftMessage,created:new Date().toISOString()};
+    if(!address||address.emirate!==state.emirate||!state.cart.length)return;
+    const order={id:id(),items:clone(state.cart),total:totals().total,currency:'AED',emirate:state.emirate,delivery,giftMessage,created:new Date().toISOString()};
     if(persist({...state,orders:[...state.orders,order],cart:[],promo:false})){address=null;protection=false;giftMessage='';go('order');}
   },
   'order-preview'(key){
@@ -734,7 +841,8 @@ document.addEventListener('submit',event=>{
     if(persist({...state,promo:true}))render();
   }
   if(form.id==='address'){
-    if(Object.values(values).some(value=>!value.trim()))return notify('Complete all delivery fields.');
+    if(!Object.hasOwn(emirateDelivery,values.emirate)||Object.values(values).some(value=>!value.trim()))return notify('Complete all delivery fields.');
+    if(values.emirate!==state.emirate&&!persist({...state,emirate:values.emirate}))return;
     address=Object.fromEntries(Object.entries(values).map(([name,value])=>[name,value.trim()]));render();
   }
 });
@@ -764,7 +872,7 @@ document.addEventListener('input',event=>{
   if(page==='checkout'&&field.form?.id==='address'&&address){
     address=null;
     byId('quoted')?.remove();
-    app.querySelector('.totals').outerHTML=totals().html;
+    refreshTotals();
   }
 });
 document.addEventListener('change',async event=>{
@@ -779,8 +887,16 @@ document.addEventListener('change',async event=>{
     byId('design-price').textContent=designPrice();
     refreshHistoryButtons();
   }
-  if(field.id==='delivery'){delivery=field.value;app.querySelector('.totals').outerHTML=totals(true).html;}
-  if(field.id==='protection'){protection=field.checked;app.querySelector('.totals').outerHTML=totals(Boolean(address)).html;}
+  if(field.id==='delivery-emirate'){
+    const emirate=field.value;
+    if(!persist({...state,emirate}))field.value=state.emirate;
+    else{
+      if(address?.emirate!==emirate)address=null;
+      refreshTotals();
+    }
+  }
+  if(field.id==='delivery'){delivery=field.value;refreshTotals();}
+  if(field.id==='protection'){protection=field.checked;refreshTotals();}
   if(field.id==='proof-zoom'){
     const viewport=byId('proof-content').querySelector('.proof-viewport');
     viewport.style.setProperty('--proof-width',(Number(field.value)*100)+'%');
@@ -811,7 +927,7 @@ document.addEventListener('change',async event=>{
       const doc=cart.find(line=>line.id===cartQuantity).design;
       field.value=doc.quantity;
       app.querySelector('[data-line-total="'+cartQuantity+'"]').textContent=money(unit(doc)*doc.quantity);
-      app.querySelector('.totals').outerHTML=totals().html;
+      refreshTotals();
       updateCount();
     }
   }
@@ -832,10 +948,8 @@ function queueTextPreview(){
   });
 }
 function refreshHistoryButtons(){
-  const undoButton=app.querySelector('button[data-action="undo"]');
-  const redoButton=app.querySelector('button[data-action="redo"]');
-  if(undoButton)undoButton.disabled=!undo.length;
-  if(redoButton)redoButton.disabled=!redo.length;
+  app.querySelectorAll('button[data-action="undo"]').forEach(button=>button.disabled=!undo.length);
+  app.querySelectorAll('button[data-action="redo"]').forEach(button=>button.disabled=!redo.length);
 }
 function quantity(value){return Math.max(1,Math.min(999,Math.trunc(Number(value))||1));}
 async function uploadImage(file,mode){
@@ -897,6 +1011,13 @@ function endDrag(event){
 app.addEventListener('pointerup',endDrag);
 app.addEventListener('pointercancel',endDrag);
 window.addEventListener('popstate',route);
+function syncEditorHeight(){
+  const height=window.visualViewport?.height;
+  if(height)document.documentElement.style.setProperty('--editor-viewport',height+'px');
+}
+window.visualViewport?.addEventListener('resize',syncEditorHeight);
+syncEditorHeight();
+mobileEditor.addEventListener('change',()=>{if(page==='editor')render();});
 document.addEventListener('keydown',event=>{
   if(page!=='editor'||step!=='Design'||byId('proof').open||event.target.matches('input,textarea,select,[contenteditable]'))return;
   const movement={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.key];
