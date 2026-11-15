@@ -614,7 +614,16 @@ const actions={
   sample(){const doc=clone(design);applyTemplate(doc,'morning');openDesign(doc);},
   blank(){openDesign(design);},
   view(value){activeView=value;const index=productFor(design).surfaces.indexOf(value);if(index>=0){side=index;selected=null;}render();},
-  tool(value){activeTool=value;render();},
+  tool(value){
+    activeTool=value;
+    render();
+    if(!window.matchMedia('(max-width: 780px)').matches)return;
+    const inspector=app.querySelector('.inspector');
+    if(!inspector)return;
+    const top=inspector.getBoundingClientRect().top;
+    const target=window.innerHeight*.58;
+    if(top>target)window.scrollBy(0,top-target);
+  },
   zoom(value){zoom=Math.max(50,Math.min(250,zoom+Number(value)));render();},
   'zoom-fit'(){zoom=100;render();},
   guides(){showGuides=!showGuides;render();},
