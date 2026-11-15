@@ -337,7 +337,7 @@ function variantColors(doc){
     finish==='Warm ivory'?'#ead9b4':'',
     style==='Classic'?'#d9d8d4':color==='Forest'?'':colorHex
   ];
-  if(doc.key==='keychain')return [color==='White'?'#fafafa':'',hardware==='Gold'?'#b59550':''];
+  if(doc.key==='keychain')return [color==='White'?'#eeeeee':'',hardware==='Gold'?'#b59550':''];
   return [color===(doc.key==='bag'?'Natural':'White')?'':colorHex,''];
 }
 function photoMaterialMask(context,path,edge=0){
@@ -366,6 +366,33 @@ function materialChannel(color,light,middle,gloss){
 function materialRGB(hex){
   return hex.slice(1).match(/../g).map(channel=>parseInt(channel,16));
 }
+function blueChroma(r,g,b){
+  return .7*(g-r)+.65*(b-r);
+}
+function edgeSamples(source,mask,index,foregroundChroma){
+  const x=index%384, y=Math.floor(index/384);
+  let backdrop=-1, material=-1;
+  for(let distance=1;distance<=12&&(backdrop<0||material<0);distance++){
+    const candidates=[
+      x>=distance?index-distance:-1,
+      x+distance<384?index+distance:-1,
+      y>=distance?index-384*distance:-1,
+      y+distance<341?index+384*distance:-1
+    ];
+    for(const neighbor of candidates){
+      if(neighbor<0)continue;
+      const p=neighbor*4;
+      const chroma=blueChroma(source[p],source[p+1],source[p+2]);
+      if(backdrop<0&&chroma>20&&mask[p+3]<=16)backdrop=p;
+      if(material<0&&chroma<=foregroundChroma&&mask[p+3]===255)material=p;
+    }
+  }
+  return [backdrop,material];
+}
+function matteMaterialChannel(color,light,middle){
+  const offset=light-middle;
+  return color+offset*(offset<0?Math.min(.55,color/118):.62);
+}
 async function paintVariantPhoto(source,cell,kind,body,trim){
   const sheetIndex=cell<12?0:1;
   if(!photoSheets.has(sheetIndex)){
@@ -373,40 +400,84 @@ async function paintVariantPhoto(source,cell,kind,body,trim){
     img.src=source;
     photoSheets.set(sheetIndex,img.decode().then(()=>img));
   }
-  const photo=await photoSheets.get(sheetIndex);
+  let photo;
+  try{photo=await photoSheets.get(sheetIndex);}
+  catch(error){photoSheets.delete(sheetIndex);throw error;}
   const offset=sheetIndex===0?cell:cell-12;
   const width=photo.naturalWidth/4, height=photo.naturalHeight/(sheetIndex===0?3:2);
   const canvas=document.createElement('canvas');
   canvas.width=384;canvas.height=341;
   const ctx=canvas.getContext('2d',{willReadFrequently:true});
-  ctx.drawImage(photo,offset%4*width,Math.floor(offset/4)*height,width,height,0,0,384,341);
+  // Crop on whole source pixels. The original photo cell needs no resampling.
+  ctx.drawImage(photo,Math.round(offset%4*width),Math.round(Math.floor(offset/4)*height),384,341,0,0,384,341);
   const frame=ctx.getImageData(0,0,384,341);
+  const original=frame.data.slice();
   const bodyPath=mugBodies[cell]||materialOutlines[cell];
-  const bodyMask=body&&bodyPath?photoMaterialMask(ctx,new Path2D(bodyPath),5):null;
-  const ring=trim&&kind==='keychain'?hardwareMask(ctx,cell):null;
+  const bodyMask=body&&bodyPath?photoMaterialMask(ctx,new Path2D(bodyPath),kind==='mug'?5:6):null;
+  const ring=kind==='keychain'&&(body||trim)?hardwareMask(ctx,cell):null;
   const bodyRGB=body?materialRGB(body):null;
   const trimRGB=trim?materialRGB(trim):null;
+  const midpoints={mug:212,shirt:224,tumbler:212,bag:218,keychain:214};
+  const foregroundChroma={shirt:9,tumbler:13,bag:6,keychain:12};
   const pixels=frame.data;
   for(let i=0;i<pixels.length;i+=4){
-    const r=pixels[i],g=pixels[i+1],b=pixels[i+2];
+    const r=original[i],g=original[i+1],b=original[i+2];
     const green=fraction((g-r-2)/6)*fraction((g-b+2)/8);
     const neutral=fraction((34-(b-r))/13)*fraction((r-g+11)/5);
-    let shade=bodyRGB, amount=bodyMask?bodyMask[i+3]/255*neutral:0, middle=212, gloss=.27;
-    if(kind==='mug'){
-      amount*=1-green;
-      if(trimRGB&&green>0){shade=trimRGB;amount=green;middle=49;gloss=.72;}
-    }else if(ring&&ring[i+3]){
-      shade=trimRGB;amount=ring[i+3]/255*neutral;middle=152;gloss=.8;
+    let shade=bodyRGB, mask=bodyMask, middle=midpoints[kind], gloss=.27, mode='body';
+    if(kind==='mug'&&trimRGB&&green>0){
+      shade=trimRGB;middle=49;gloss=.72;mode='mug-trim';
+    }else if(ring&&ring[i+3]>96){
+      shade=trimRGB;mask=ring;middle=152;gloss=.8;mode='hardware';
     }
-    if(amount===0)continue;
+    if(!shade)continue;
     const light=.2126*r+.7152*g+.0722*b;
+    if(kind==='mug'||mode==='hardware'){
+      const amount=mode==='mug-trim'?green:(mask?mask[i+3]/255*neutral:0)*(kind==='mug'?1-green:1);
+      if(!amount)continue;
+      for(let channel=0;channel<3;channel++){
+        const replacement=materialChannel(shade[channel],light,middle,gloss);
+        pixels[i+channel]=original[i+channel]+(replacement-original[i+channel])*amount;
+      }
+      continue;
+    }
+    if(!mask||mask[i+3]===0)continue;
+    const chroma=blueChroma(r,g,b);
+    const foreground=foregroundChroma[kind];
+    let amount=fraction((26-chroma)/(26-foreground))*mask[i+3]/255;
+    if(amount<.04)continue;
+    let backdrop=-1, detail=light;
+    if(amount<.995){
+      const [backgroundPixel,materialPixel]=edgeSamples(original,mask,i/4,foreground);
+      backdrop=backgroundPixel;
+      if(backdrop>=0){
+        const backdropChroma=blueChroma(original[backdrop],original[backdrop+1],original[backdrop+2]);
+        const matteEnd=Math.min(28,backdropChroma-3);
+        const edge=fraction((matteEnd-chroma)/Math.max(6,matteEnd-foreground));
+        if(edge<.04)continue;
+        amount=edge*mask[i+3]/255;
+        if(materialPixel>=0){
+          // Match the photo's original edge blend using the nearby colors
+          // on either side. Apply the new color only to its material share.
+          let projection=0, range=0;
+          for(let channel=0;channel<3;channel++){
+            const span=original[materialPixel+channel]-original[backdrop+channel];
+            projection+=(original[i+channel]-original[backdrop+channel])*span;
+            range+=span*span;
+          }
+          if(range>144)amount=Math.min(amount+.12,fraction(projection/range));
+          detail=.2126*original[materialPixel]+.7152*original[materialPixel+1]+.0722*original[materialPixel+2];
+        }
+      }
+    }
     for(let channel=0;channel<3;channel++){
-      const replacement=materialChannel(shade[channel],light,middle,gloss);
-      pixels[i+channel]=pixels[i+channel]*(1-amount)+replacement*amount;
+      const replacement=matteMaterialChannel(shade[channel],detail,middle);
+      const under=backdrop>=0?original[backdrop+channel]:original[i+channel];
+      pixels[i+channel]=under*(1-amount)+replacement*amount;
     }
   }
   ctx.putImageData(frame,0,0);
-  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.94));
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
   if(!blob)throw Error('Could not render product photo');
   return URL.createObjectURL(blob);
 }
