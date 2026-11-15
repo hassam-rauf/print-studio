@@ -117,13 +117,19 @@ function applyTemplate(doc,name){
   const [w,h]=dimensions(doc);
   const themes={morning:['The Morning Club','#184a36','✦'],coast:['COASTAL CLUB','#244bc7','☀'],made:['Made for you','#9c3654','♥']};
   const [copy,color,symbol]=themes[name];
-  const centers=isWrap(doc)?[w*.13,w/2,w*.87]:[w/2];
+  const centers=isWrap(doc)?[w*.18,w/2,w*.82]:[w/2];
   doc.backgrounds=doc.surfaces.map(()=> 'transparent');
   delete doc.backgroundImages;
-  doc.surfaces=doc.surfaces.map((_,index)=>centers.flatMap(x=>[
-    {...layer(symbol,x,h*.38,Math.min(33,h*.23)),color},
-    {...layer(index?'EST. 2026':copy,x,h*.56,isWrap(doc)?21:36),font:'Instrument Serif',color}
-  ]));
+  doc.surfaces=doc.surfaces.map((_,index)=>centers.flatMap(x=>{
+    const caption={...layer(index?'EST. 2026':copy,x,h*.56,isWrap(doc)?21:36),font:'Instrument Serif',color};
+    // Allow room for the wrap seam and for the neighboring template motifs.
+    if(isWrap(doc)){
+      const maxWidth=Math.min(w*.29,2*(Math.min(x,w-x)-30));
+      const [width]=geometry(caption);
+      if(width>maxWidth)caption.size=Math.floor(caption.size*maxWidth/width);
+    }
+    return [{...layer(symbol,x,h*.38,Math.min(33,h*.23)),color},caption];
+  }));
 }
 function unit(doc) {
   return productFor(doc).price+Object.entries(availableOptions(doc)).reduce((sum,[name,choices])=>sum+(choices[doc.options[name]]??0),0);
@@ -397,7 +403,11 @@ function applyHistory(from,to){
 function input(label,attrs){return '<label>'+label+'<input '+attrs+'></label>';}
 function currentLayer(){return design.surfaces[side].find(item=>item.id===selected);}
 function quantityInput(){return input('Quantity','id="quantity" type="number" min="1" max="999" value="'+design.quantity+'"');}
-function designPrice(){return money(unit(design)*design.quantity)+' · '+money(unit(design))+' each';}
+function designPrice(){
+  const price=unit(design);
+  if(step==='Review')return money(price*design.quantity);
+  return money(price*design.quantity)+' · '+money(price)+' each';
+}
 function layerBounds(item,w,h){
   const y=item.kind==='text'?-item.size:-h/2;
   const r=item.rotation*Math.PI/180, c=Math.cos(r), s=Math.sin(r);
@@ -454,8 +464,11 @@ function productView(){
   return '<div class="breadcrumbs">'+button('All products','catalog')+'<span>/</span>'+p.name+'</div><div class="product-page"><section class="stack">'+mockup(sample,side,activeView)+previewButtons(sample,activeView,'view',false)+'</section><section class="panel stack"><h1>'+p.name+'</h1><p>'+p.intro+'</p><strong class="price">'+money(unit(design))+' each</strong>'+options(false)+'<div class="row">'+button('Start with a template','sample','','class="primary"')+button('Start from blank','blank')+'</div>'+customerSupport()+'</section></div>';
 }
 function sideName(index,doc=design){return productFor(doc).surfaces[index];}
+function productOptionName(name){
+  return design.key==='mug'&&name==='Color'?'Handle & rim color':name;
+}
 function optionLabel(name,choices,current){
-  const label=design.key==='mug'&&name==='Color'?'Handle & rim color':name;
+  const label=productOptionName(name);
   return '<label>'+safe(label)+'<select data-option="'+name+'">'+Object.entries(choices).map(([value,price])=>'<option value="'+safe(value)+'" '+(current===value?'selected':'')+'>'+value+(price?' ('+(price>0?'+':'−')+money(Math.abs(price))+')':'')+'</option>').join('')+'</select></label>';
 }
 function options(includeQty=true){
@@ -536,10 +549,40 @@ function previewPanel(){
   const p=productFor(design);
   return '<aside class="editor-preview"><h2>Product preview</h2><p>'+p.name+'</p><div id="live-product" class="live-product">'+productImage(design,activeView,false,side)+'</div>'+previewButtons(design,activeView,'view',true,side)+'</aside>';
 }
+function reviewWarnings(){
+  const groups=new Map();
+  for(const issue of issues()){
+    const key=issue.index+':'+issue.message;
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(issue);
+  }
+  if(!groups.size)return '<p class="review-status success">No print warnings found.</p>';
+  return '<section class="review-warnings warning" aria-label="Print warnings"><h3>Print warnings</h3>'+
+    [...groups.values()].map(group=>{
+      const {index,message}=group[0];
+      const label=sideName(index)+' · '+message;
+      const actions=group.map(({item})=>{
+        const number=design.surfaces[index].indexOf(item)+1;
+        const name=group.length===1?layerName(item):'Layer '+number+' · '+layerName(item);
+        return button(name,'fix',index+':'+item.id);
+      }).join('');
+      return '<details class="review-issue"><summary>'+safe(label)+
+        (group.length>1?' <span class="issue-count">('+group.length+' layers)</span>':'')+
+        '</summary><div class="review-issue-actions">'+actions+'</div></details>';
+    }).join('')+'</section>';
+}
 function review(){
-  const found=issues();
-  return '<h2>Review your design</h2><p>Check the artwork, print boundaries and selected options.</p><dl class="review-options">'+Object.entries(design.options).map(([key,value])=>'<div><dt>'+safe(key)+'</dt><dd>'+safe(value)+'</dd></div>').join('')+'</dl>'+
-    (found.length?'<div class="warning stack">'+found.map(issue=>button(sideName(issue.index)+' · '+issue.message,'fix',issue.index+':'+issue.item.id)).join('')+'</div>':'<p class="success">No print warnings found.</p>')+quantityInput();
+  const mobile=mobileEditor.matches;
+  const product=productFor(design);
+  const mini=mobile?'<button type="button" class="review-mockup" data-action="preview" aria-label="Open product preview">'+
+    productImage(design,activeView,true,side)+'</button>':'';
+  const details=Object.entries(design.options).map(([key,value])=>
+    '<div><dt>'+safe(productOptionName(key))+'</dt><dd>'+safe(value)+'</dd></div>').join('');
+  return '<h2>Review your design</h2><div class="review-overview">'+mini+
+    '<div class="review-purchase"><strong class="review-product-name">'+safe(product.name)+'</strong>'+
+    quantityInput()+'<div class="review-total"><span>Total</span><strong id="design-price">'+designPrice()+'</strong></div>'+
+    '</div></div>'+reviewWarnings()+'<details class="review-specs"'+(mobile?'':' open')+'><summary>Product options</summary>'+
+    '<dl class="review-options">'+details+'</dl></details>';
 }
 function editor(){
   const card=productFor(design).type==='card';
@@ -562,7 +605,11 @@ function editor(){
       canvas(mobile?photoPreview:'')+(mobile?'':photoPreview)+'</div>';
   }
   const details=()=>'<h2>Personalize</h2><form id="details" class="stack">'+input('Name','name="name" maxlength="70"')+input('Greeting','name="greeting" maxlength="70"')+'<label>Message on back<textarea name="message" maxlength="250"></textarea></label><button class="primary">Apply details</button></form>';
-  const body={Details:details,Options:()=>'<h2>Product options</h2>'+options(),Review:review}[step]();
+  if(step==='Review'){
+    return head+'<div class="editor-other review-screen"><section class="panel stack review-panel">'+review()+'</section>'+
+      (mobileEditor.matches?'':previewPanel())+'</div>';
+  }
+  const body=step==='Details'?details():'<h2>Product options</h2>'+options();
   return head+'<div class="editor-other"><div class="panel stack">'+body+'<strong id="design-price">'+designPrice()+'</strong></div>'+previewPanel()+'</div>';
 }
 function showProof(doc,view=defaultView(doc),detailSide=0){
