@@ -295,3 +295,11 @@ dialog form{display:flex;justify-content:flex-end;margin-bottom:8px}
   .proof-viewport { min-height: 0; height: min(43dvh, 420px); margin-bottom: 8px; }
   #notice { right: 10px; left: 10px; bottom: 10px; }
 }
+
+/* Keep navigation usable in narrow split-screen windows. */
+@media (max-width: 300px) {
+  header.site-head { flex-wrap: wrap; justify-content: center; gap: 0; }
+  .site-head .brand { min-height: 34px; }
+  .site-head nav { flex: 1 0 100%; justify-content: center; }
+  .editor-head .steps { grid-column: 1 / -1; grid-row: 3; justify-content: center; }
+}
